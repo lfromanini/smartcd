@@ -156,7 +156,7 @@ Other valid entries are `--version` and `--help`.
 
 #### Optional Requirements
 
-* [exa](https://the.exa.website/) : Directory preview.
+* [exa](https://the.exa.website/) : Directory preview. **The icon characters must be present in the font you are using in your terminal** - it is the font that contains the icons. The majority of fonts probably not include these glyphs by default. A good solution to this problem is the [Nerd Fonts project](https://www.nerdfonts.com), which patches existing fixed-width fonts with the necessary icons.
 * [tree](https://linux.die.net/man/1/tree) : Directory preview, in case `exa` is not installed.
 * [fd](https://github.com/sharkdp/fd) : `find` alternative to search entries in filesystem.
 

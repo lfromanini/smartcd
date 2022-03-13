@@ -34,7 +34,7 @@ function __smartcd::cd()
 	local selectedEntry=""
 	local fzfSelect1=""
 
-	# create default files if not exists
+	# create database files if not exists
 	[ ! -f "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}" ] && __smartcd::databaseReset
 	[ ! -f "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" ] && __smartcd::autoexecReset
 
@@ -92,9 +92,6 @@ function __smartcd::choose()
 
 		fzfPreview='[ -d {} ] && '${cmdPreview}' --tree --colour=always --icons --group-directories-first --all --level=1 {} || echo '"${errMessage}"''
 
-		# don't draw icons over ssh
-		[ ! -z "${SSH_CLIENT}" ] && fzfPreview='[ -d {} ] && '${cmdPreview}' --tree --colour=always --group-directories-first --all --level=1 {} || echo '"${errMessage}"''
-
 	elif [[ "${cmdPreview}" = */tree ]] ; then
 
 		fzfPreview='[ -d {} ] && '${cmdPreview}' --dirsfirst -a -x -C --filelimit 100 -L 1 {} || echo '"${errMessage}"''
@@ -124,7 +121,7 @@ function __smartcd::enterPath()
 
 	if [ ${returnCode} -eq 0 ] ; then
 
-		__smartcd::databaseSavePath
+		__smartcd::databaseSavePath "${PWD}"
 		__smartcd::autoexecRun .on_entry.smartcd.sh
 
 	else
@@ -165,22 +162,24 @@ function __smartcd::databaseSearch()
 
 function __smartcd::databaseSavePath()
 {
-	[ "${PWD}" = "${HOME}" ] || [ "${PWD}" = "/" ] && return	# avoid saving $HOME and /
+	local directory="${1}"
 
-	local fTmp=$( mktemp --tmpdir="/dev/shm/" )
+	[ "${directory}" = "${HOME}" ] || [ "${directory}" = "/" ] && return	# avoid saving $HOME and /
 
-	echo "${PWD}" > "${fTmp}"
-	command cat "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}" >> "${fTmp}"
-	command awk '!seen[$0]++' "${fTmp}" > "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}"
-	command sed --in-place $(( ${SMARTCD_HIST_SIZE} + 1 ))',$ d' "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}"	# limit max records
+	# remove previous entry
+	__smartcd::databaseDeletePath "${directory}"
 
-	rm -f "${fTmp}"
+	# add to first row
+	command sed --in-place "1 s:^:${directory}\n:" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}"
+
+	# limit max records
+	command sed --in-place $(( ${SMARTCD_HIST_SIZE} + 1 ))',$ d' "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}"
 }
 
 function __smartcd::databaseDeletePath()
 {
-	local deleteString="${1}"
-	command sed --in-place "\\:^${deleteString}$:d" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}"
+	local directory="${1}"
+	command sed --in-place "\\:^${directory}$:d" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}"
 }
 
 function __smartcd::databaseCleanup()
@@ -222,7 +221,7 @@ function __smartcd::autoexecRun()
 
 	if [ -r "${fAutoexec}" ] ; then
 
-		# custom autoexec file
+		# autoexec file
 		checksum=$( command md5sum "${fAutoexec}" | command awk '{ print $1 }' )
 		checksumStored=$( command grep "${PWD}/${fAutoexec}" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" | command cut --delimiter='|' --fields="2" )
 		[ "${checksum}" = "${checksumStored}" ] && bExecuted="true" && source "${fAutoexec}"
@@ -231,7 +230,7 @@ function __smartcd::autoexecRun()
 
 	if [ "${bExecuted}" = "false" ] && [ -r "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" ] ; then
 
-		# common autoexec file
+		# global autoexec file
 		checksum=$( command md5sum "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" | command awk '{ print $1 }' )
 		checksumStored=$( command grep "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" | command cut --delimiter='|' --fields="2" )
 		[ "${checksum}" = "${checksumStored}" ] && source "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}"
@@ -246,28 +245,29 @@ function __smartcd::autoexecAdd()
 	local fName=$( basename -- "${fAutoexec}" )
 	local checksum=""
 
-	if [ "${fPath}" = "${SMARTCD_CONFIG_FOLDER}" ] && [ "${fName}" != on_entry.smartcd.sh ] && [ "${fName}" != on_leave.smartcd.sh ] ; then
+	if [ "${fPath}" = "${SMARTCD_CONFIG_FOLDER}" ] && [ "${fName}" != "on_entry.smartcd.sh" ] && [ "${fName}" != "on_leave.smartcd.sh" ] ; then
+
 		echo "smartcd - autoexec file [ ${fAutoexec} ] : INVALID FILENAME"
 		return 2
-	fi
 
-	if [ "${fPath}" != "${SMARTCD_CONFIG_FOLDER}" ] && [ "${fName}" != .on_entry.smartcd.sh ] && [ "${fName}" != .on_leave.smartcd.sh ] ; then
+	elif [ "${fPath}" != "${SMARTCD_CONFIG_FOLDER}" ] && [ "${fName}" != ".on_entry.smartcd.sh" ] && [ "${fName}" != ".on_leave.smartcd.sh" ] ; then
+
 		echo "smartcd - autoexec file [ ${fAutoexec} ] : INVALID FILENAME"
 		return 2
-	fi
 
-	if [ ! -r "${fAutoexec}" ] ; then
+	elif [ ! -r "${fAutoexec}" ] ; then
+
 		echo "smartcd - autoexec file [ ${fAutoexec} ] : UNREADABLE"
 		return 2
+
 	fi
 
-	# custom autoexec file
 	checksum=$( command md5sum "${fAutoexec}" | command awk '{ print $1 }' )
 
 	echo "${fAutoexec}""|""${checksum}" >> "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}"
 	echo "smartcd - autoexec file [ ${fAutoexec} ] : ADDED"
 
-	# remove duplicates or older checksums
+	# remove previous checksum
 	__smartcd::autoexecCleanup
 }
 
@@ -313,7 +313,7 @@ function __smartcd::autoexecReset()
 
 function smartcd()
 {
-	local readonly VERSION="2.1.0"
+	local readonly VERSION="2.2.0"
 	local arg=""
 	local fAutoexec=""
 
@@ -329,7 +329,7 @@ function smartcd()
 				echo
 				echo "smartcd - autoexec database file [ ${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE} ] contents:"
 				echo
-				command cat "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" | command cut --delimiter='|' --fields="1" | command grep --color=auto --line-number ""
+				command cut --delimiter='|' --fields="1" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" | command grep --color=auto --line-number --extended-regexp 'on_entry|on_leave'
 			;;
 
 			-c|--cleanup)
