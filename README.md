@@ -23,7 +23,7 @@ This tool saves the last visited and valid directories in `~/.config/smartcd/pat
 
 ![cd --](https://github.com/lfromanini/smartcd/blob/main/screenshots/cd--.png?raw=true)
 
-If `cd` is called with partial (case insensitive) folder name, **smartcd** will try the best options in filesystem (maximum of three depth) and in the database file. If more than one option is available, it will present a selection menu, enriched with a side panel using `exa` or `tree`. If only one best match is found, it will navigate straight to it. For faster search on filesystem, `fd` will be used, fallbacking to [find](https://linux.die.net/man/1/find) if `fd` is not installed.
+If `cd` is called with partial (case insensitive) folder name, **smartcd** will try the best options in filesystem and in the database file. For faster search on filesystem, `fd` will be used, fallbacking to [find](https://linux.die.net/man/1/find) if `fd` is not installed.
 
 Besides of helping navigating paths, `smartcd` comes bundled with an additional feature. If exists a file called `.on_entry.smartcd.sh` or `.on_leave.smartcd.sh`, if will execute it contents at entering or leaving the given folder. For example in a python project folder, create the files as below:
 
@@ -113,12 +113,15 @@ source ~/.zshrc
 
 A directory record will be saved by default at `~/.config/smartcd/path_history.db`. This can be overwritten defining `SMARTCD_CONFIG_FOLDER` and `SMARTCD_HIST_FILE` variables before sourcering the code.
 Additionally, it's possible to define the maximum entries remembered overwriting `SMARTCD_HIST_SIZE`. Initially, this value is set to 100.
+Autoexec database record will be saved in `SMARTCD_CONFIG_FOLDER`.
 
 ```bash
 ( ... )
 SMARTCD_CONFIG_FOLDER="$HOME/myConfigFolder"
 SMARTCD_HIST_FILE="myConfigFile.db"
-SMARTCD_HIST_SIZE="20"
+SMARTCD_HIST_SIZE="200"
+SMARTCD_AUTOEXEC_FILE="myAutoexec.db"
+
 source path/to/smartcd.sh
 ( ... )
 ```
