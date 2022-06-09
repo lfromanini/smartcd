@@ -30,14 +30,11 @@ function __smartcd::cd()
 {
 	local readonly SMARTCD_SEARCH_RESULTS="/dev/shm/smartcd_pid_$$.db.tmp"
 
-	local lookUpPath="${1}"
+	local lookUpPath="${1:-$HOME}"	# if no argument is provided, assume $HOME to mimic built-in cd
 	local selectedEntry=""
 	local fzfSelect1=""
 
 	[ ! -f "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}" ] && __smartcd::databaseReset
-
-	# if no argument is provided, assume $HOME to mimic built-in cd
-	[ -z "${lookUpPath}" ] && lookUpPath="$HOME"
 
 	if [ "${lookUpPath}" = "-" ] || [ -d "${lookUpPath}" ] ; then
 
@@ -86,19 +83,21 @@ function __smartcd::choose()
 	local cmdPreview=$( whereis -b exa tree ls | command awk '{ print $2 }' | command awk '/./ { print ; exit }' )
 	local errMessage="no such directory [ {} ]'\n\n'hint: run '\033[1m'smartcd --cleanup'\033[22m'"
 
-	if [[ "${cmdPreview}" = */exa ]] ; then
+	case "${cmdPreview}" in
 
+	*/exa)
 		fzfPreview='[ -d {} ] && '${cmdPreview}' --tree --colour=always --icons --group-directories-first --all --level=1 {} || echo '"${errMessage}"''
+	;;
 
-	elif [[ "${cmdPreview}" = */tree ]] ; then
-
+	*/tree)
 		fzfPreview='[ -d {} ] && '${cmdPreview}' --dirsfirst -a -x -C --filelimit 100 -L 1 {} || echo '"${errMessage}"''
+	;;
 
-	else
-
+	*)
 		fzfPreview='[ -d {} ] && echo [ {} ] ; '${cmdPreview}' --color=always --almost-all --group-directories-first {} || echo '"${errMessage}"''
+	;;
 
-	fi
+	esac
 
 	command awk '!seen[ $0 ]++ && $0 != ""' "${fOptions}" | command fzf ${fzfSelect1} --delimiter="\n" --layout="reverse" --height="40%" --preview="${fzfPreview}"
 }
@@ -135,15 +134,17 @@ function __smartcd::filesystemSearch()
 	local searchString=$( basename -- "${1}" )
 	local cmdFinder=$( whereis -b fdfind fd find | command awk '{ print $2 }' | command awk '/./ { print ; exit }' )
 
-	if [[ "${cmdFinder}" = */fd* ]] ; then
+	case "${cmdFinder}" in
 
+	*/fd*)
 		"${cmdFinder}" --hidden "${searchString}" --color=never --follow --min-depth=1 --max-depth=1 --type=directory --exclude ".git/" "${searchPath}" --exec realpath --no-symlink 2>/dev/null
+	;;
 
-	else
-
+	*)
 		"${cmdFinder}" "${searchPath}" -follow -mindepth 1 -maxdepth 1 -type d ! -path '*\.git/*' -iname '*'"${searchString}"'*' -exec realpath --no-symlinks {} + 2>/dev/null
+	;;
 
-	fi
+	esac
 }
 
 function __smartcd::databaseSearch()
@@ -322,7 +323,7 @@ function __smartcd::askAndReset()
 	answer="" ; read answer
 
 	case "${answer}" in
-		Y|y|YES|yes)
+		Y|y|YES|yes|Yes)
 			__smartcd::databaseReset
 			printf "smartcd - paths database file [ ${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE} ] : RESET\n"
 		;;
@@ -333,7 +334,7 @@ function __smartcd::askAndReset()
 	answer="" ; read answer
 
 	case "${answer}" in
-		Y|y|YES|yes)
+		Y|y|YES|yes|Yes)
 			__smartcd::autoexecReset
 			printf "smartcd - autoexec database file [ ${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE} ] : RESET\n"
 		;;
@@ -342,7 +343,7 @@ function __smartcd::askAndReset()
 
 function __smartcd::printVersion()
 {
-	local readonly VERSION="2.2.1"
+	local readonly VERSION="2.2.2"
 	printf "smartcd ${VERSION}\n"
 }
 
