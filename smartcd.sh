@@ -80,7 +80,7 @@ function __smartcd::choose()
 	local fOptions="${1}"
 	local fzfSelect1="${2}"
 	local fzfPreview=""
-	local cmdPreview=$( whereis -b exa tree ls | command awk '{ print $2 }' | command awk '/./ { print ; exit }' )
+	local cmdPreview=$( whereis -b exa tree ls | command awk '/: ./ { print $2 ; exit }' )
 	local errMessage="no such directory [ {} ]'\n\n'hint: run '\033[1m'smartcd --cleanup'\033[22m'"
 
 	case "${cmdPreview}" in
@@ -132,7 +132,7 @@ function __smartcd::filesystemSearch()
 {
 	local searchPath=$( dirname -- "${1}" )
 	local searchString=$( basename -- "${1}" )
-	local cmdFinder=$( whereis -b fdfind fd find | command awk '{ print $2 }' | command awk '/./ { print ; exit }' )
+	local cmdFinder=$( whereis -b fdfind fd find | command awk '/: ./ { print $2 ; exit }' )
 
 	case "${cmdFinder}" in
 
@@ -343,7 +343,7 @@ function __smartcd::askAndReset()
 
 function __smartcd::printVersion()
 {
-	local readonly VERSION="2.2.2"
+	local readonly VERSION="2.2.3"
 	printf "smartcd ${VERSION}\n"
 }
 
