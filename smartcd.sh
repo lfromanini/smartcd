@@ -484,7 +484,7 @@ function smartcd()
 			-e|--edit)
 				"${EDITOR}" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}"
 				# at least one row needed
-				[ $( wc --lines < "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}" ) -eq 0 ] && __smartcd::databaseReset
+				[ $( wc --lines < "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}" ) -eq 0 ] && __smartcd::databaseReset || true
 			;;
 
 			-r|--reset)
