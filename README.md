@@ -140,10 +140,22 @@ Remove all invalid paths from database file (for the case when directory doesn't
 smartcd --cleanup
 ```
 
+Use default `$EDITOR` to manully edit paths database file (for the case when you want to remove a given path from it):
+
+```bash
+smartcd --edit
+```
+
 Be careful! This command removes all saved paths and autoexec granted files:
 
 ```bash
 smartcd --reset
+```
+
+Starting on version 2.3.0, `smartcd` can upgrade itself:
+
+```bash
+smartcd --upgrade
 ```
 
 Other valid entries are `--version` and `--help`.

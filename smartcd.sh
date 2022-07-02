@@ -26,6 +26,13 @@ export SMARTCD_CONFIG_FOLDER=${SMARTCD_CONFIG_FOLDER:-"$HOME/.config/smartcd"}
 export SMARTCD_HIST_FILE=${SMARTCD_HIST_FILE:-"path_history.db"}
 export SMARTCD_AUTOEXEC_FILE=${SMARTCD_AUTOEXEC_FILE:-"autoexec.db"}
 
+# check shell
+[ -z "$BASH_VERSION" ] && [ -z "$ZSH_VERSION" ] && printf "Can't use smartcd : unknown shell\n" && return 1
+
+# check if mandatory dependencies are available, otherwise skip replacing built-in cd
+[ -z "$( whereis -b fzf | awk '{ print $2 }' )" ] && printf "Can't use smartcd : missing fzf\n" && return 1
+[ -z "$( whereis -b md5sum | awk '{ print $2 }' )" ] && printf "Can't use smartcd : missing md5sum\n" && return 1
+
 function __smartcd::cd()
 {
 	local fSearchResults=$( mktemp --tmpdir="/dev/shm/" -t smartcd_$$_XXXXX.tmp )
@@ -71,7 +78,7 @@ function __smartcd::cd()
 		fi
 	fi
 
-	command rm -f "${fSearchResults}"
+	command rm --force "${fSearchResults}"
 	__smartcd::enterPath "${selectedEntry}"
 }
 
@@ -200,7 +207,7 @@ function __smartcd::databaseCleanup()
 	# at least one row needed
 	[ $( wc --lines < "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}" ) -eq 0 ] && __smartcd::databaseReset
 
-	command rm -f "${fTmp}"
+	command rm --force "${fTmp}"
 }
 
 function __smartcd::databaseReset()
@@ -222,7 +229,7 @@ function __smartcd::autoexecRun()
 
 		# autoexec file
 		checksum=$( md5sum "${fAutoexec}" | awk '{ print $1 }' )
-		checksumStored=$( grep --max-count=1 "${PWD}/${fAutoexec}" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" | cut --delimiter='|' --fields="2" )
+		checksumStored=$( grep --max-count=1 "${PWD}/${fAutoexec}" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" | cut --delimiter='|' --fields=2 )
 		[ "${checksum}" = "${checksumStored}" ] && bExecuted="true" && source "${fAutoexec}"
 
 	fi
@@ -231,7 +238,7 @@ function __smartcd::autoexecRun()
 
 		# global autoexec file
 		checksum=$( md5sum "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" | awk '{ print $1 }' )
-		checksumStored=$( grep --max-count=1 "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" | cut --delimiter='|' --fields="2" )
+		checksumStored=$( grep --max-count=1 "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" | cut --delimiter='|' --fields=2 )
 		[ "${checksum}" = "${checksumStored}" ] && source "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}"
 
 	fi
@@ -286,8 +293,8 @@ function __smartcd::autoexecCleanup()
 
 	while read -r line || [ -n "${line}" ] ; do
 
-		fAutoexec=$( echo "${line}" | cut --delimiter='|' --fields="1" )
-		checksumStored=$( echo "${line}" | cut --delimiter='|' --fields="2" )
+		fAutoexec=$( echo "${line}" | cut --delimiter='|' --fields=1 )
+		checksumStored=$( echo "${line}" | cut --delimiter='|' --fields=2 )
 		checksum=""
 
 		[ -r "${fAutoexec}" ] && checksum=$( md5sum "${fAutoexec}" | awk '{ print $1 }' )
@@ -305,7 +312,7 @@ function __smartcd::autoexecCleanup()
 	# at least one row needed
 	[ $( wc --lines < "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" ) -eq 0 ] && __smartcd::autoexecReset
 
-	command rm -f "${fTmp}"
+	command rm --force "${fTmp}"
 }
 
 function __smartcd::autoexecReset()
@@ -327,6 +334,10 @@ function __smartcd::askAndReset()
 			__smartcd::databaseReset
 			printf "smartcd - paths database file [ ${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE} ] : RESET\n"
 		;;
+
+		*)
+			printf "smartcd - paths database file [ ${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE} ] : CANCELLED\n"
+		;;
 	esac
 
 	printf "\nsmartcd - autoexec database file [ ${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE} ] will be erased\n"
@@ -338,12 +349,80 @@ function __smartcd::askAndReset()
 			__smartcd::autoexecReset
 			printf "smartcd - autoexec database file [ ${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE} ] : RESET\n"
 		;;
+
+		*)
+			printf "smartcd - autoexec database file [ ${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE} ] : CANCELLED\n"
+		;;
+	esac
+}
+
+function __smartcd::upgrade()
+{
+	local answer=""
+	local fScriptInstalled=""
+	local fScriptRemote=""
+	local versionInstalled=$( __smartcd::printVersion | cut --delimiter=' ' --fields=2 )
+	local versionRemote=""
+
+	if [ -n "$BASH_VERSION" ] ; then
+
+		fScriptInstalled=$( dirname "$( realpath ${BASH_SOURCE[0]} )" )
+
+	elif [ -n "$ZSH_VERSION" ] ; then
+
+		fScriptInstalled=${${(%):-%x}:A:h}
+
+	else
+
+		printf "Can't use smartcd : unknown shell\n"
+		return 1
+	fi
+
+	fScriptInstalled+="/smartcd.sh"
+
+	if [ ! -w "${fScriptInstalled}" ] ; then
+
+		printf "\nsmartcd - can't upgrade read only file [ ${fScriptInstalled} ]\n"
+		printf "smartcd - aborting...\n"
+		return 1
+
+	fi
+
+	printf "smartcd - downloading remote version...\n\n"
+	fScriptRemote=$( mktemp )
+	curl --location --output "${fScriptRemote}" https://raw.githubusercontent.com/lfromanini/smartcd/main/smartcd.sh
+	versionRemote=$( grep 'VERSION=' "${fScriptRemote}" | cut --delimiter='"' --fields=2 )
+
+	if [ "${versionInstalled}" = "${versionRemote}" ] ; then
+
+		printf "\nsmartcd - no need to upgrade [ ${versionInstalled} ]\n"
+		command rm --force "${fScriptRemote}"
+		return 0
+
+	fi
+
+	printf "\nsmartcd - installed version [ ${versionInstalled} ]\n"
+	printf "smartcd - available version [ ${versionRemote} ]\n"
+	printf '\033[1m'"Upgrade [y/n]? "'\033[22m'
+	answer="" ; read answer
+
+	case "${answer}" in
+		Y|y|YES|yes|Yes)
+			printf "smartcd - upgrade [ ${versionInstalled} -> ${versionRemote} ] : UPGRADED\n"
+			command mv --force "${fScriptRemote}" "${fScriptInstalled}"
+			source "${fScriptInstalled}"
+		;;
+
+		*)
+			command rm --force "${fScriptRemote}"
+			printf "smartcd - upgrade [ ${versionInstalled} -> ${versionRemote} ] : CANCELLED\n"
+		;;
 	esac
 }
 
 function __smartcd::printVersion()
 {
-	local readonly VERSION="2.2.4"
+	local readonly VERSION="2.3.0"
 	printf "smartcd ${VERSION}\n"
 }
 
@@ -355,6 +434,8 @@ function __smartcd::printHelp()
 	printf "smartcd [OPTIONS]\n\n"
 	printf "    -l, --list                list paths saved at database file and allowed autexec files\n\n"
 	printf "    -c, --cleanup             remove incorrect entries from paths and autoexec database files\n\n"
+	printf "    -e, --edit                manually edit paths database file\n"
+	printf "                              autoexec database file should not be manually edited\n\n"
 	printf "    -r, --reset               reset database file to original state\n\n"
 	printf "        --autoexec=\"[FILE]\"   for security reasons, authorize file to be autoexecuted\n"
 	printf "                              if FILE contents changes, it must be authorized again\n"
@@ -365,6 +446,7 @@ function __smartcd::printHelp()
 	printf "                                  ${SMARTCD_CONFIG_FOLDER}/on_entry.smartcd.sh\n"
 	printf "                                  ${SMARTCD_CONFIG_FOLDER}/on_leave.smartcd.sh\n"
 	printf "                              ( if relative file is executed, global will be skipped for the given folder )\n\n"
+	printf "    -u, --upgrade             self upgrade if a new version is available online\n\n"
 	printf "    -v, --version             output version information\n\n"
 	printf "    -h, --help                display this help\n\n"
 	printf "cd [ARGS]\n\n"
@@ -399,6 +481,12 @@ function smartcd()
 				printf "smartcd - autoexec database file [ ${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE} ] : CLEAR\n"
 			;;
 
+			-e|--edit)
+				"${EDITOR}" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}"
+				# at least one row needed
+				[ $( wc --lines < "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}" ) -eq 0 ] && __smartcd::databaseReset
+			;;
+
 			-r|--reset)
 				__smartcd::askAndReset
 			;;
@@ -406,6 +494,10 @@ function smartcd()
 			--autoexec=*)
 				fAutoexec="${arg#*=}"
 				__smartcd::autoexecAdd "${fAutoexec}"
+			;;
+
+			-u|--upgrade)
+				__smartcd::upgrade
 			;;
 
 			-v|--version)
@@ -425,10 +517,6 @@ function smartcd()
 		esac
 	done
 }
-
-# check if mandatory dependencies are available, otherwise skip replacing built-in cd
-[ -z "$( whereis -b fzf | awk '{ print $2 }' )" ] && echo "Can't use smartcd : missing fzf" && return 1
-[ -z "$( whereis -b md5sum | awk '{ print $2 }' )" ] && echo "Can't use smartcd : missing md5sum" && return 1
 
 # bash builtin cd case insensitive
 #[ -n "$BASH_VERSION" ] && shopt -s cdspell
