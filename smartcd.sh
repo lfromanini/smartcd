@@ -391,7 +391,7 @@ function __smartcd::upgrade()
 	printf "smartcd - downloading remote version...\n\n"
 	fScriptRemote=$( mktemp )
 	curl --location --output "${fScriptRemote}" https://raw.githubusercontent.com/lfromanini/smartcd/main/smartcd.sh
-	versionRemote=$( grep 'VERSION="[0-9].[0-9].[0-9]"' "${fScriptRemote}" | cut --delimiter='"' --fields=2 )
+	versionRemote=$( grep 'local readonly VERSION=' "${fScriptRemote}" | tail -1 | cut --delimiter='"' --fields=2 )
 
 	if [ "${versionInstalled}" = "${versionRemote}" ] ; then
 
