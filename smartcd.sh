@@ -514,7 +514,7 @@ function __smartcd::upgrade()
 
 function __smartcd::printVersion()
 {
-	local readonly VERSION="2.4.1"
+	local readonly VERSION="2.4.2"
 	printf "smartcd ${VERSION}\n"
 }
 
@@ -565,9 +565,9 @@ function smartcd()
 				command grep --color=auto --line-number "" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}" 2>/dev/null
 				printf "\nsmartcd - autoexec database file [ ${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE} ] contents:\n\n"
 				{ command cut --delimiter='|' --fields="1" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" | command grep --color=auto --line-number --extended-regexp 'on_entry|on_leave' ; } 2>/dev/null
-				printf "\nsmartcd - ignore list [ \$SMARTCD_HIST_IGNORE ] contents:\n\n"
-				echo "/|${HOME}|""${SMARTCD_HIST_IGNORE}" | command sed 's:|:'"\n"':g' | command sort --unique
-				true
+				printf "\nsmartcd - ignore list [ \$SMARTCD_HIST_IGNORE ] sorted contents:\n"
+				printf "          ( always ignored \"/\" and \"\$HOME\" )\n\n"
+				printf "${SMARTCD_HIST_IGNORE}""\n" | command sed 's:|:'"\n"':g' | command sort --unique
 			;;
 
 			-c|--cleanup)
