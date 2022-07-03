@@ -412,7 +412,18 @@ function __smartcd::upgrade()
 
 	printf "smartcd - downloading remote version...\n\n"
 	fScriptRemote=$( mktemp )
+
 	curl --location --output "${fScriptRemote}" "${SRC_REMOTE}"
+	returnCode=$?
+
+	if [ ${returnCode} -ne 0 ] ; then
+
+		command rm --force "${fScriptRemote}"
+		printf "smartcd - could not download remote version : FAILED\n"
+		return ${returnCode}
+
+	fi
+
 	versionRemote=$( grep 'local readonly VERSION=' "${fScriptRemote}" | grep --invert-match 'grep' | cut --delimiter='"' --fields=2 )
 
 	if [ "${versionInstalled}" = "${versionRemote}" ] ; then
@@ -435,6 +446,7 @@ function __smartcd::upgrade()
 
 			if [ ${returnCode} -eq 0 ] ; then
 
+				command chmod 644 "${fScriptInstalled}"
 				printf "smartcd - upgrade [ ${versionInstalled} -> ${versionRemote} ] : UPGRADED\n"
 				source "${fScriptInstalled}"
 
@@ -456,7 +468,7 @@ function __smartcd::upgrade()
 
 function __smartcd::printVersion()
 {
-	local readonly VERSION="2.3.2"
+	local readonly VERSION="2.3.3"
 	printf "smartcd ${VERSION}\n"
 }
 
