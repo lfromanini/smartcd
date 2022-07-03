@@ -125,7 +125,7 @@ source path/to/smartcd.sh
 ( ... )
 ```
 
-Starting on version 2.4.0, **smartcd** now can have an ignore list. It's stored as pipe delimited list in variable `SMARTCD_HIST_IGNORE`, before sourcing the code:
+Starting on version 2.4.0, **smartcd** now can have an ignore list. It's stored as pipe delimited list in variable `SMARTCD_HIST_IGNORE`. It also can be customized executing, before sourcing the code:
 
 ```bash
 ( ... )
@@ -135,9 +135,9 @@ source path/to/smartcd.sh
 ( ... )
 ```
 
-By default, only `.git` folder is in ignore list. Don't add any `/` or regex to this variable.
+By default, only `.git` folder is in ignore list. **Don't add any `/` or regex to this variable.**
 
-Folders `$HOME` and `/` are not stored in database, since they can be reached very easily.
+Folders `$HOME` and `/` are never stored in database, since they can be reached very easily.
 
 ## Maintenance
 
