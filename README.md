@@ -15,7 +15,6 @@ smartcd - A mnemonist cd command with autoexec feature
 ## Description
 
 A `cd` command with improved usability features, which can remember your recently visited directory paths, search and directly traverse to sub-directories, all with fuzzy searching.
-This project came to life after I reviewed one initiative at Reddit. At that time I suggested some [changes](https://www.reddit.com/r/commandline/comments/r3ea3b/smartcd_a_mnemonist_cd_command_updated/) but the code author already had improved his initial commit. That's the why I uploaded this version here.
 
 ## Usage
 
@@ -25,7 +24,7 @@ This tool saves the last visited and valid directories in `~/.config/smartcd/pat
 
 If `cd` is called with partial (case insensitive) folder name, **smartcd** will try the best options in filesystem and in the database file. For faster search on filesystem, `fd` will be used, fallbacking to [find](https://linux.die.net/man/1/find) if `fd` is not installed.
 
-Besides of helping navigating paths, `smartcd` comes bundled with an additional feature. If exists a file called `.on_entry.smartcd.sh` or `.on_leave.smartcd.sh`, if will execute it contents at entering or leaving the given folder. For example in a python project folder, create the files as below:
+Besides of helping navigating paths, `smartcd` comes bundled with an additional feature. If exists a file called `.on_entry.smartcd.sh` or `.on_leave.smartcd.sh`, they will be executed at entering (`source .on_entry.smartcd.sh`) or leaving (`source .on_leave.smartcd.sh`) the given folder. For example in a python project folder, create the files as below:
 
 ```bash
 # on entry
@@ -41,7 +40,7 @@ smarcd --autoexec=".on_leave.smartcd.sh"
 
 And `smartcd` will activate and deactivate the virtual environment as soon as it enters or leaves the project folder.
 
-To avoid potential security breachs, autoexecution must be granted with `smartcd --autoexec="[FILE]"`. If file was changed after this command, it must be executed again, otherwise, file will not be executed. To stop autoexecution, just remove the file or rename it.
+To avoid potential security breachs, autoexecution must be granted with `smartcd --autoexec="[FILE]"`. If file was changed after this command, it must be executed again, otherwise, file will not be executed due to different checksum. To stop autoexecution, just remove the file or rename it.
 
 It is also possible to define and allow global `on_entry` and `on_leave` files. They will be executed only if no custom files are registred in the given folder. Please, notice that those global files **doesn't** starts with **"." (dot)**.
 
@@ -107,7 +106,7 @@ source ~/.zshrc
 
 3. Navigate to some paths and don't forget to try `cd --`!
 
-4. Done!
+4. Done! And remember: you can upgrade **smartcd** with `smartcd --upgrade`.
 
 ## Configuration
 

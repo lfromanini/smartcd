@@ -188,7 +188,7 @@ function __smartcd::databaseCleanup()
 {
 	local IFS=
 
-	local fTmp=$( mktemp --tmpdir="/dev/shm/" )
+	local fTmp=$( mktemp )
 	local line=""
 
 	[ ! -f "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}" ] && __smartcd::databaseReset
@@ -213,7 +213,7 @@ function __smartcd::databaseCleanup()
 function __smartcd::databaseReset()
 {
 	mkdir --parents "${SMARTCD_CONFIG_FOLDER}"
-	echo > "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}"
+	printf "\n" > "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}"
 }
 
 function __smartcd::autoexecRun()
@@ -225,22 +225,39 @@ function __smartcd::autoexecRun()
 
 	[ ! -f "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" ] && __smartcd::autoexecReset
 
-	if [ -r "${fAutoexec}" ] ; then
+	# autoexec file
+	if [ -f "${fAutoexec}" ] && [ ! -r "${fAutoexec}" ] ; then
 
-		# autoexec file
+		printf "smartcd - autoexec file [ ${fAutoexec} ] : UNREADABLE\n"
+
+	elif [ -r "${fAutoexec}" ] ; then
+
 		checksum=$( md5sum "${fAutoexec}" | awk '{ print $1 }' )
 		checksumStored=$( grep --max-count=1 "${PWD}/${fAutoexec}" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" | cut --delimiter='|' --fields=2 )
-		[ "${checksum}" = "${checksumStored}" ] && bExecuted="true" && source "${fAutoexec}"
 
+		if [ "${checksum}" = "${checksumStored}" ] ; then
+			bExecuted="true"
+			source "${fAutoexec}"
+		else
+			printf "smartcd - autoexec file [ ${fAutoexec} ] : INVALID CHECKSUM\n"
+		fi
 	fi
 
-	if [ "${bExecuted}" = "false" ] && [ -r "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" ] ; then
+	# global autoexec file
+	if [ -f "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" ] && [ ! -r "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" ] ; then
 
-		# global autoexec file
+		printf "smartcd - autoexec file [ "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" ] : UNREADABLE\n"
+
+	elif [ -r "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" ] && [ "${bExecuted}" = "false" ] ; then
+
 		checksum=$( md5sum "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" | awk '{ print $1 }' )
 		checksumStored=$( grep --max-count=1 "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" | cut --delimiter='|' --fields=2 )
-		[ "${checksum}" = "${checksumStored}" ] && source "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}"
 
+		if [ "${checksum}" = "${checksumStored}" ] ; then
+			source "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}"
+		else
+			printf "smartcd - autoexec file [ "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" ] : INVALID CHECKSUM\n"
+		fi
 	fi
 }
 
@@ -283,7 +300,7 @@ function __smartcd::autoexecCleanup()
 {
 	local IFS=
 
-	local fTmp=$( mktemp --tmpdir="/dev/shm/" )
+	local fTmp=$( mktemp )
 	local line=""
 	local fAutoexec=""
 	local checksum=""
@@ -313,12 +330,14 @@ function __smartcd::autoexecCleanup()
 	[ $( wc --lines < "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" ) -eq 0 ] && __smartcd::autoexecReset
 
 	command rm --force "${fTmp}"
+	command chmod 600 "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}"
 }
 
 function __smartcd::autoexecReset()
 {
 	mkdir --parents "${SMARTCD_CONFIG_FOLDER}"
-	echo > "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}"
+	printf "\n" > "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}"
+	command chmod 600 "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}"
 }
 
 function __smartcd::askAndReset()
@@ -358,6 +377,9 @@ function __smartcd::askAndReset()
 
 function __smartcd::upgrade()
 {
+	local readonly SRC_REMOTE="https://raw.githubusercontent.com/lfromanini/smartcd/main/smartcd.sh"
+
+	local returnCode=0
 	local answer=""
 	local fScriptInstalled=""
 	local fScriptRemote=""
@@ -390,8 +412,8 @@ function __smartcd::upgrade()
 
 	printf "smartcd - downloading remote version...\n\n"
 	fScriptRemote=$( mktemp )
-	curl --location --output "${fScriptRemote}" https://raw.githubusercontent.com/lfromanini/smartcd/main/smartcd.sh
-	versionRemote=$( grep 'local readonly VERSION=' "${fScriptRemote}" | tail -1 | cut --delimiter='"' --fields=2 )
+	curl --location --output "${fScriptRemote}" "${SRC_REMOTE}"
+	versionRemote=$( grep 'local readonly VERSION=' "${fScriptRemote}" | grep --invert-match 'grep' | cut --delimiter='"' --fields=2 )
 
 	if [ "${versionInstalled}" = "${versionRemote}" ] ; then
 
@@ -401,28 +423,40 @@ function __smartcd::upgrade()
 
 	fi
 
-	printf "\nsmartcd - installed version [ ${versionInstalled} ]\n"
-	printf "smartcd - available version [ ${versionRemote} ]\n"
+	printf "\nsmartcd - upgrade available [ ${versionInstalled} -> ${versionRemote} ]\n"
 	printf '\033[1m'"Upgrade [y/n]? "'\033[22m'
 	answer="" ; read answer
 
 	case "${answer}" in
 		Y|y|YES|yes|Yes)
-			printf "smartcd - upgrade [ ${versionInstalled} -> ${versionRemote} ] : UPGRADED\n"
+			printf "\nsmartcd - upgrading file [ ${fScriptInstalled} ]...\n"
 			command mv --force "${fScriptRemote}" "${fScriptInstalled}"
-			source "${fScriptInstalled}"
+			returnCode=$?
+
+			if [ ${returnCode} -eq 0 ] ; then
+
+				printf "smartcd - upgrade [ ${versionInstalled} -> ${versionRemote} ] : UPGRADED\n"
+				source "${fScriptInstalled}"
+
+			else
+
+				command rm --force "${fScriptRemote}"
+				printf "smartcd - upgrade [ ${versionInstalled} -> ${versionRemote} ] : FAILED\n"
+			fi
 		;;
 
 		*)
 			command rm --force "${fScriptRemote}"
-			printf "smartcd - upgrade [ ${versionInstalled} -> ${versionRemote} ] : CANCELLED\n"
+			printf "\nsmartcd - upgrade [ ${versionInstalled} -> ${versionRemote} ] : CANCELLED\n"
 		;;
 	esac
+
+	return ${returnCode}
 }
 
 function __smartcd::printVersion()
 {
-	local readonly VERSION="2.3.1"
+	local readonly VERSION="2.3.2"
 	printf "smartcd ${VERSION}\n"
 }
 
@@ -482,9 +516,13 @@ function smartcd()
 			;;
 
 			-e|--edit)
-				"${EDITOR}" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}"
-				# at least one row needed
-				[ $( wc --lines < "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}" ) -eq 0 ] && __smartcd::databaseReset || true
+				if [ ! -z "${EDITOR}" ] ; then
+					"${EDITOR}" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}"
+					# at least one row needed
+					[ $( wc --lines < "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}" ) -eq 0 ] && __smartcd::databaseReset || true
+				else
+					printf "smartcd - editor variable not set [ \$EDITOR ] : ABORTED\n"
+				fi
 			;;
 
 			-r|--reset)
