@@ -493,7 +493,6 @@ function __smartcd::upgrade()
 
 			if [ ${returnCode} -eq 0 ] ; then
 
-				command chmod 644 "${fScriptInstalled}"
 				printf "smartcd - upgrade [ ${versionInstalled} -> ${versionRemote} ] : UPGRADED\n"
 				source "${fScriptInstalled}"
 
@@ -515,7 +514,7 @@ function __smartcd::upgrade()
 
 function __smartcd::printVersion()
 {
-	local readonly VERSION="2.4.0"
+	local readonly VERSION="2.4.1"
 	printf "smartcd ${VERSION}\n"
 }
 
