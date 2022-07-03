@@ -110,7 +110,7 @@ source ~/.zshrc
 
 ## Configuration
 
-A directory record will be saved by default at `~/.config/smartcd/path_history.db`. This can be overwritten defining `SMARTCD_CONFIG_FOLDER` and `SMARTCD_HIST_FILE` variables before sourcering the code.
+A directory record will be saved by default at `~/.config/smartcd/path_history.db`. This can be overwritten defining `SMARTCD_CONFIG_FOLDER` and `SMARTCD_HIST_FILE` variables before sourcing the code.
 Additionally, it's possible to define the maximum entries remembered overwriting `SMARTCD_HIST_SIZE`. Initially, this value is set to 100.
 Autoexec database record will be saved in `SMARTCD_CONFIG_FOLDER`.
 
@@ -125,9 +125,23 @@ source path/to/smartcd.sh
 ( ... )
 ```
 
+Starting on version 2.4.0, **smartcd** now can have an ignore list. It's stored as pipe delimited list in variable `SMARTCD_HIST_IGNORE`, before sourcing the code:
+
+```bash
+( ... )
+SMARTCD_HIST_IGNORE=".git|.idea|node_modules|__pycache__"
+
+source path/to/smartcd.sh
+( ... )
+```
+
+By default, only `.git` folder is in ignore list. Don't add any `/` or regex to this variable.
+
+Folders `$HOME` and `/` are not stored in database, since they can be reached very easily.
+
 ## Maintenance
 
-List database file contents:
+List database file contents and ignore list:
 
 ```bash
 smartcd --list

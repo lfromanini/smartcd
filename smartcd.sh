@@ -21,6 +21,7 @@
 # execute files .on_enter.smartcd.sh and .on_leave.smartcd.sh if available
 
 export SMARTCD_HIST_SIZE=${SMARTCD_HIST_SIZE:-"100"}
+export SMARTCD_HIST_IGNORE=${SMARTCD_HIST_IGNORE:-".git"}	# pipe delimited list of ignored folders
 
 export SMARTCD_CONFIG_FOLDER=${SMARTCD_CONFIG_FOLDER:-"$HOME/.config/smartcd"}
 export SMARTCD_HIST_FILE=${SMARTCD_HIST_FILE:-"path_history.db"}
@@ -166,7 +167,27 @@ function __smartcd::databaseSavePath()
 {
 	local directory="${1}"
 
+	local iCounter=0
+	local ignoreItem=""
+	local ignoreItemFound=""
+
 	[ "${directory}" = "${HOME}" ] || [ "${directory}" = "/" ] && return	# avoid saving $HOME and /
+
+	while true ; do
+
+		(( ++iCounter ))
+
+		ignoreItem=$( echo "${SMARTCD_HIST_IGNORE}"'|' | cut --delimiter='|' --fields=${iCounter} )
+		[ -z "${ignoreItem}" ] && break
+
+		ignoreItemFound=$( echo "${directory}" | grep --extended-regexp '/'"${ignoreItem}"'$|/'"${ignoreItem}"'/' )
+
+		if [ ! -z "${ignoreItemFound}" ] ; then
+			# remove ignored entry and leave function
+			__smartcd::databaseDeletePath "${directory}"
+			return
+		fi
+	done
 
 	# remove previous entry
 	__smartcd::databaseDeletePath "${directory}"
@@ -191,11 +212,37 @@ function __smartcd::databaseCleanup()
 	local fTmp=$( mktemp )
 	local line=""
 
+	local iCounter=0
+	local bIgnore="false"
+	local ignoreItem=""
+	local ignoreItemFound=""
+
 	[ ! -f "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}" ] && __smartcd::databaseReset
 
 	while read -r line || [ -n "${line}" ] ; do
 
-		[ -d "${line}" ] && printf "%s\n" "${line}" >> "${fTmp}"
+		if [ -d "${line}" ] ; then
+
+			iCounter=0
+			bIgnore="false"
+
+			while true ; do
+
+				(( ++iCounter ))
+
+				ignoreItem=$( echo "${SMARTCD_HIST_IGNORE}"'|' | cut --delimiter='|' --fields=${iCounter} )
+				[ -z "${ignoreItem}" ] && break
+
+				ignoreItemFound=$( echo "${line}" | grep --extended-regexp '/'"${ignoreItem}"'$|/'"${ignoreItem}"'/' )
+
+				if [ ! -z "${ignoreItemFound}" ] ; then
+					bIgnore="true"
+					break
+				fi
+			done
+
+			[ "${bIgnore}" = "false" ] && printf "%s\n" "${line}" >> "${fTmp}"
+		fi
 
 	done < "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}"
 
@@ -468,7 +515,7 @@ function __smartcd::upgrade()
 
 function __smartcd::printVersion()
 {
-	local readonly VERSION="2.3.3"
+	local readonly VERSION="2.4.0"
 	printf "smartcd ${VERSION}\n"
 }
 
@@ -478,7 +525,8 @@ function __smartcd::printHelp()
 	printf "A mnemonist cd command with autoexec feature\n\n"
 	printf "Options:\n\n"
 	printf "smartcd [OPTIONS]\n\n"
-	printf "    -l, --list                list paths saved at database file and allowed autexec files\n\n"
+	printf "    -l, --list                list paths saved at database file and allowed autexec files\n"
+	printf "                              also print ignored paths list\n\n"
 	printf "    -c, --cleanup             remove incorrect entries from paths and autoexec database files\n\n"
 	printf "    -e, --edit                manually edit paths database file\n"
 	printf "                              autoexec database file should not be manually edited\n\n"
@@ -515,9 +563,12 @@ function smartcd()
 		case "${arg}" in
 			-l|--list)
 				printf "smartcd - paths database file [ ${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE} ] contents:\n\n"
-				command grep --color=auto --line-number "" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}" 2>/dev/null || true
+				command grep --color=auto --line-number "" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}" 2>/dev/null
 				printf "\nsmartcd - autoexec database file [ ${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE} ] contents:\n\n"
-				{ command cut --delimiter='|' --fields="1" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" | command grep --color=auto --line-number --extended-regexp 'on_entry|on_leave' ; } 2>/dev/null || true
+				{ command cut --delimiter='|' --fields="1" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" | command grep --color=auto --line-number --extended-regexp 'on_entry|on_leave' ; } 2>/dev/null
+				printf "\nsmartcd - ignore list [ \$SMARTCD_HIST_IGNORE ] contents:\n\n"
+				echo "/|${HOME}|""${SMARTCD_HIST_IGNORE}" | command sed 's:|:'"\n"':g' | command sort --unique
+				true
 			;;
 
 			-c|--cleanup)
