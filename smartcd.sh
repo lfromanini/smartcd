@@ -31,8 +31,8 @@ export SMARTCD_AUTOEXEC_FILE=${SMARTCD_AUTOEXEC_FILE:-"autoexec.db"}
 [ -z "$BASH_VERSION" ] && [ -z "$ZSH_VERSION" ] && printf "Can't use smartcd : unknown shell\n" && return 1
 
 # check if mandatory dependencies are available, otherwise skip replacing built-in cd
-[ -z "$( whereis -b fzf | awk '{ print $2 }' )" ] && printf "Can't use smartcd : missing fzf\n" && return 1
-[ -z "$( whereis -b md5sum | awk '{ print $2 }' )" ] && printf "Can't use smartcd : missing md5sum\n" && return 1
+[ -z "$( whereis -b fzf | command awk '{ print $2 }' )" ] && printf "Can't use smartcd : missing fzf\n" && return 1
+[ -z "$( whereis -b md5sum | command awk '{ print $2 }' )" ] && printf "Can't use smartcd : missing md5sum\n" && return 1
 
 function __smartcd::cd()
 {
@@ -61,12 +61,12 @@ function __smartcd::cd()
 		__smartcd::databaseSearch "${lookUpPath}" > "${fSearchResults}"
 
 		# trust in database result
-		[ $( wc --lines < "${fSearchResults}" ) -gt 0 ] && fzfSelect1="--select-1"
+		[ $( command wc --lines < "${fSearchResults}" ) -gt 0 ] && fzfSelect1="--select-1"
 
 		# add filesystem results
 		__smartcd::filesystemSearch "${lookUpPath}" >> "${fSearchResults}"
 
-		if [ $( wc --lines < "${fSearchResults}" ) -gt 0 ] ; then
+		if [ $( command wc --lines < "${fSearchResults}" ) -gt 0 ] ; then
 
 			# found something, offer to select
 			selectedEntry=$( __smartcd::choose "${fSearchResults}" "${fzfSelect1}" )
@@ -88,7 +88,7 @@ function __smartcd::choose()
 	local fOptions="${1}"
 	local fzfSelect1="${2}"
 	local fzfPreview=""
-	local cmdPreview=$( whereis -b exa tree ls | awk '/: ./ { print $2 ; exit }' )
+	local cmdPreview=$( whereis -b exa tree ls | command awk '/: ./ { print $2 ; exit }' )
 	local errMessage="no such directory [ {} ]'\n\n'hint: run '\033[1m'smartcd --cleanup'\033[22m'"
 
 	case "${cmdPreview}" in
@@ -104,7 +104,6 @@ function __smartcd::choose()
 	*)
 		fzfPreview='[ -d {} ] && echo [ {} ] ; '${cmdPreview}' --color=always --almost-all --group-directories-first {} || echo '"${errMessage}"''
 	;;
-
 	esac
 
 	command awk '!seen[ $0 ]++ && $0 != ""' "${fOptions}" | command fzf ${fzfSelect1} --delimiter="\n" --layout="reverse" --height="40%" --preview="${fzfPreview}"
@@ -140,7 +139,7 @@ function __smartcd::filesystemSearch()
 {
 	local searchPath=$( dirname -- "${1}" )
 	local searchString=$( basename -- "${1}" )
-	local cmdFinder=$( whereis -b fdfind fd find | awk '/: ./ { print $2 ; exit }' )
+	local cmdFinder=$( whereis -b fdfind fd find | command awk '/: ./ { print $2 ; exit }' )
 
 	case "${cmdFinder}" in
 
@@ -177,10 +176,10 @@ function __smartcd::databaseSavePath()
 
 		(( ++iCounter ))
 
-		ignoreItem=$( echo "${SMARTCD_HIST_IGNORE}"'|' | cut --delimiter='|' --fields=${iCounter} )
+		ignoreItem=$( echo "${SMARTCD_HIST_IGNORE}"'|' | command cut --delimiter='|' --fields=${iCounter} )
 		[ -z "${ignoreItem}" ] && break
 
-		ignoreItemFound=$( echo "${directory}" | grep --extended-regexp '/'"${ignoreItem}"'$|/'"${ignoreItem}"'/' )
+		ignoreItemFound=$( echo "${directory}" | command grep --extended-regexp '/'"${ignoreItem}"'$|/'"${ignoreItem}"'/' )
 
 		if [ ! -z "${ignoreItemFound}" ] ; then
 			# remove ignored entry and leave function
@@ -230,10 +229,10 @@ function __smartcd::databaseCleanup()
 
 				(( ++iCounter ))
 
-				ignoreItem=$( echo "${SMARTCD_HIST_IGNORE}"'|' | cut --delimiter='|' --fields=${iCounter} )
+				ignoreItem=$( echo "${SMARTCD_HIST_IGNORE}"'|' | command cut --delimiter='|' --fields=${iCounter} )
 				[ -z "${ignoreItem}" ] && break
 
-				ignoreItemFound=$( echo "${line}" | grep --extended-regexp '/'"${ignoreItem}"'$|/'"${ignoreItem}"'/' )
+				ignoreItemFound=$( echo "${line}" | command grep --extended-regexp '/'"${ignoreItem}"'$|/'"${ignoreItem}"'/' )
 
 				if [ ! -z "${ignoreItemFound}" ] ; then
 					bIgnore="true"
@@ -252,7 +251,7 @@ function __smartcd::databaseCleanup()
 	command sed --in-place '/^[[:blank:]]*$/ d' "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}"
 
 	# at least one row needed
-	[ $( wc --lines < "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}" ) -eq 0 ] && __smartcd::databaseReset
+	[ $( command wc --lines < "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}" ) -eq 0 ] && __smartcd::databaseReset
 
 	command rm --force "${fTmp}"
 }
@@ -279,8 +278,8 @@ function __smartcd::autoexecRun()
 
 	elif [ -r "${fAutoexec}" ] ; then
 
-		checksum=$( md5sum "${fAutoexec}" | awk '{ print $1 }' )
-		checksumStored=$( grep --max-count=1 "${PWD}/${fAutoexec}" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" | cut --delimiter='|' --fields=2 )
+		checksum=$( command md5sum "${fAutoexec}" | command awk '{ print $1 }' )
+		checksumStored=$( command grep --max-count=1 "${PWD}/${fAutoexec}" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" | command cut --delimiter='|' --fields=2 )
 
 		if [ "${checksum}" = "${checksumStored}" ] ; then
 			bExecuted="true"
@@ -297,8 +296,8 @@ function __smartcd::autoexecRun()
 
 	elif [ -r "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" ] && [ "${bExecuted}" = "false" ] ; then
 
-		checksum=$( md5sum "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" | awk '{ print $1 }' )
-		checksumStored=$( grep --max-count=1 "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" | cut --delimiter='|' --fields=2 )
+		checksum=$( command md5sum "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" | command awk '{ print $1 }' )
+		checksumStored=$( command grep --max-count=1 "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" | command cut --delimiter='|' --fields=2 )
 
 		if [ "${checksum}" = "${checksumStored}" ] ; then
 			source "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}"
@@ -329,12 +328,11 @@ function __smartcd::autoexecAdd()
 
 		printf "smartcd - autoexec file [ ${fAutoexec} ] : UNREADABLE\n"
 		return 2
-
 	fi
 
 	[ ! -f "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" ] && __smartcd::autoexecReset
 
-	checksum=$( md5sum "${fAutoexec}" | awk '{ print $1 }' )
+	checksum=$( command md5sum "${fAutoexec}" | command awk '{ print $1 }' )
 
 	printf "${fAutoexec}|${checksum}\n" >> "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}"
 	printf "smartcd - autoexec file [ ${fAutoexec} ] : ADDED\n"
@@ -357,11 +355,11 @@ function __smartcd::autoexecCleanup()
 
 	while read -r line || [ -n "${line}" ] ; do
 
-		fAutoexec=$( echo "${line}" | cut --delimiter='|' --fields=1 )
-		checksumStored=$( echo "${line}" | cut --delimiter='|' --fields=2 )
+		fAutoexec=$( echo "${line}" | command cut --delimiter='|' --fields=1 )
+		checksumStored=$( echo "${line}" | command cut --delimiter='|' --fields=2 )
 		checksum=""
 
-		[ -r "${fAutoexec}" ] && checksum=$( md5sum "${fAutoexec}" | awk '{ print $1 }' )
+		[ -r "${fAutoexec}" ] && checksum=$( command md5sum "${fAutoexec}" | command awk '{ print $1 }' )
 
 		[ "${checksum}" = "${checksumStored}" ] && printf "%s\n" "${line}" >> "${fTmp}"
 
@@ -374,7 +372,7 @@ function __smartcd::autoexecCleanup()
 	command sed --in-place '/^[[:blank:]]*$/ d' "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}"
 
 	# at least one row needed
-	[ $( wc --lines < "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" ) -eq 0 ] && __smartcd::autoexecReset
+	[ $( command wc --lines < "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" ) -eq 0 ] && __smartcd::autoexecReset
 
 	command rm --force "${fTmp}"
 	command chmod 600 "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}"
@@ -430,7 +428,7 @@ function __smartcd::upgrade()
 	local answer=""
 	local fScriptInstalled=""
 	local fScriptRemote=""
-	local versionInstalled=$( __smartcd::printVersion | cut --delimiter=' ' --fields=2 )
+	local versionInstalled=$( __smartcd::printVersion | command cut --delimiter=' ' --fields=2 )
 	local versionRemote=""
 
 	if [ -n "$BASH_VERSION" ] ; then
@@ -460,7 +458,7 @@ function __smartcd::upgrade()
 	printf "smartcd - downloading remote version...\n\n"
 	fScriptRemote=$( mktemp )
 
-	curl --location --output "${fScriptRemote}" "${SRC_REMOTE}"
+	command curl --location --output "${fScriptRemote}" "${SRC_REMOTE}"
 	returnCode=$?
 
 	if [ ${returnCode} -ne 0 ] ; then
@@ -471,7 +469,7 @@ function __smartcd::upgrade()
 
 	fi
 
-	versionRemote=$( grep 'local readonly VERSION=' "${fScriptRemote}" | grep --invert-match 'grep' | cut --delimiter='"' --fields=2 )
+	versionRemote=$( command grep 'local readonly VERSION=' "${fScriptRemote}" | command grep --invert-match 'grep' | command cut --delimiter='"' --fields=2 )
 
 	if [ "${versionInstalled}" = "${versionRemote}" ] ; then
 
@@ -514,7 +512,7 @@ function __smartcd::upgrade()
 
 function __smartcd::printVersion()
 {
-	local readonly VERSION="2.4.2"
+	local readonly VERSION="2.4.3"
 	printf "smartcd ${VERSION}\n"
 }
 
@@ -581,7 +579,7 @@ function smartcd()
 				if [ ! -z "${EDITOR}" ] ; then
 					"${EDITOR}" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}"
 					# at least one row needed
-					[ $( wc --lines < "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}" ) -eq 0 ] && __smartcd::databaseReset || true
+					[ $( command wc --lines < "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}" ) -eq 0 ] && __smartcd::databaseReset || true
 				else
 					printf "smartcd - editor variable not set [ \$EDITOR ] : ABORTED\n"
 				fi
