@@ -144,13 +144,12 @@ function __smartcd::filesystemSearch()
 	case "${cmdFinder}" in
 
 	*/fd*)
-		"${cmdFinder}" --hidden "${searchString}" --color=never --follow --min-depth=1 --max-depth=1 --type=directory --exclude ".git/" "${searchPath}" --exec realpath --no-symlink 2>/dev/null
+		"${cmdFinder}" --hidden --no-ignore-vcs "${searchString}" --color=never --follow --min-depth=1 --max-depth=1 --type=directory --exclude ".git/" "${searchPath}" --exec realpath --no-symlink 2>/dev/null
 	;;
 
 	*)
 		"${cmdFinder}" "${searchPath}" -follow -mindepth 1 -maxdepth 1 -type d ! -path '*\.git/*' -iname '*'"${searchString}"'*' -exec realpath --no-symlinks {} + 2>/dev/null
 	;;
-
 	esac
 }
 
@@ -172,6 +171,7 @@ function __smartcd::databaseSavePath()
 
 	[ "${directory}" = "${HOME}" ] || [ "${directory}" = "/" ] && return	# avoid saving $HOME and /
 
+	# search in ignore list
 	while true ; do
 
 		(( ++iCounter ))
@@ -225,6 +225,7 @@ function __smartcd::databaseCleanup()
 			iCounter=0
 			bIgnore="false"
 
+			# search in ignore list
 			while true ; do
 
 				(( ++iCounter ))
@@ -452,7 +453,6 @@ function __smartcd::upgrade()
 		printf "\nsmartcd - can't upgrade read only file [ ${fScriptInstalled} ]\n"
 		printf "smartcd - aborting...\n"
 		return 1
-
 	fi
 
 	printf "smartcd - downloading remote version...\n\n"
@@ -466,7 +466,6 @@ function __smartcd::upgrade()
 		command rm --force "${fScriptRemote}"
 		printf "smartcd - could not download remote version : FAILED\n"
 		return ${returnCode}
-
 	fi
 
 	versionRemote=$( command grep 'local readonly VERSION=' "${fScriptRemote}" | command grep --invert-match 'grep' | command cut --delimiter='"' --fields=2 )
@@ -476,7 +475,6 @@ function __smartcd::upgrade()
 		printf "\nsmartcd - no need to upgrade [ ${versionInstalled} ]\n"
 		command rm --force "${fScriptRemote}"
 		return 0
-
 	fi
 
 	printf "\nsmartcd - upgrade available [ ${versionInstalled} -> ${versionRemote} ]\n"
@@ -512,7 +510,7 @@ function __smartcd::upgrade()
 
 function __smartcd::printVersion()
 {
-	local readonly VERSION="2.4.3"
+	local readonly VERSION="2.4.4"
 	printf "smartcd ${VERSION}\n"
 }
 
