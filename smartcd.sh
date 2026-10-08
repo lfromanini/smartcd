@@ -1,81 +1,49 @@
-# https://github.com/lfromanini/smartcd
-#
-# A cd command with improved usability features
-#
-# examples:
-#
-# resolve directory name with case insensitive :
-# cd incompleteFolderNam
-#
-# list last directories and navigate to the selected entry
-# cd --
-#
-# some aliases :
-#
-# -     ( return to previous folder, like "cd -" )
-# cd..  ( cd .. )
-# ..    ( cd .. )
-# ..2   ( cd ../.. )
-# ..3   ( cd ../../.. )
-#
-# execute files .on_enter.smartcd.sh and .on_leave.smartcd.sh if available
-
 export SMARTCD_HIST_SIZE=${SMARTCD_HIST_SIZE:-"100"}
-export SMARTCD_HIST_IGNORE=${SMARTCD_HIST_IGNORE:-".git"}	# pipe delimited list of ignored folders
+export SMARTCD_HIST_IGNORE=${SMARTCD_HIST_IGNORE:-".git"}								# pipe delimited list of ignored folders
 
-export SMARTCD_CONFIG_FOLDER=${SMARTCD_CONFIG_FOLDER:-"$HOME/.config/smartcd"}
+export SMARTCD_CONFIG_FOLDER=${SMARTCD_CONFIG_FOLDER:-"${HOME}/.config/smartcd"}
 export SMARTCD_HIST_FILE=${SMARTCD_HIST_FILE:-"path_history.db"}
 export SMARTCD_AUTOEXEC_FILE=${SMARTCD_AUTOEXEC_FILE:-"autoexec.db"}
 
 # check shell
-[ -z "$BASH_VERSION" ] && [ -z "$ZSH_VERSION" ] && printf "Can't use smartcd : unknown shell\n" && return 1
+[[ -z "${BASH_VERSION}" ]] && [[ -z "${ZSH_VERSION}" ]] && printf "Can't use smartcd : unknown shell\n" && return 1
 
 # check if mandatory dependencies are available, otherwise skip replacing built-in cd
-[ -z "$( whereis -b fzf | command awk '{ print $2 }' )" ] && printf "Can't use smartcd : missing fzf\n" && return 1
-[ -z "$( whereis -b md5sum | command awk '{ print $2 }' )" ] && printf "Can't use smartcd : missing md5sum\n" && return 1
+[[ -z "$( whereis -b fzf | awk '{ print $2 }' )" ]] && printf "Can't use smartcd : missing fzf\n" && return 1
+[[ -z "$( whereis -b md5sum | awk '{ print $2 }' )" ]] && printf "Can't use smartcd : missing md5sum\n" && return 1
 
 function __smartcd::cd()
 {
-	local fSearchResults=$( mktemp --tmpdir="/dev/shm/" -t smartcd_$$_XXXXX.tmp )
+	local fSearchResults=""
 
-	local lookUpPath="${1:-$HOME}"	# if no argument is provided, assume $HOME to mimic built-in cd
+	local lookUpPath="${1:-${HOME}}"													# if no argument is provided, assume $HOME to mimic built-in cd
 	local selectedEntry=""
 	local fzfSelect1=""
 
-	[ ! -f "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}" ] && __smartcd::databaseReset
+	fSearchResults=$( mktemp --tmpdir="/dev/shm/" -t smartcd_$$_XXXXX.tmp )
 
-	if [ "${lookUpPath}" = "-" ] || [ -d "${lookUpPath}" ] ; then
+	[[ ! -f "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}" ]] && __smartcd::databaseReset
 
-		# dir exists, navigate to it
-		selectedEntry="${lookUpPath}"
+	if [[ "${lookUpPath}" == "-" ]] || [[ -d "${lookUpPath}" ]] ; then
 
-	elif [ "${lookUpPath}" = "--" ] ; then
+		selectedEntry="${lookUpPath}"													# dir exists, navigate to it
 
-		# search in database for historical paths
-		__smartcd::databaseSearch > "${fSearchResults}"
+	elif [[ "${lookUpPath}" == "--" ]] ; then
+
+		__smartcd::databaseSearch > "${fSearchResults}"									# search in database for historical paths
 		selectedEntry=$( __smartcd::choose "${fSearchResults}" "${fzfSelect1}" )
-
 	else
 
-		# search in database
-		__smartcd::databaseSearch "${lookUpPath}" > "${fSearchResults}"
+		__smartcd::databaseSearch "${lookUpPath}" > "${fSearchResults}"					# search in database
+		(( $( wc --lines < "${fSearchResults}" ) > 0 )) && fzfSelect1="--select-1"		# trust in database result
+		__smartcd::filesystemSearch "${lookUpPath}" >> "${fSearchResults}"				# add filesystem results
 
-		# trust in database result
-		[ $( command wc --lines < "${fSearchResults}" ) -gt 0 ] && fzfSelect1="--select-1"
+		if (( $( wc --lines < "${fSearchResults}" ) > 0 )) ; then
 
-		# add filesystem results
-		__smartcd::filesystemSearch "${lookUpPath}" >> "${fSearchResults}"
-
-		if [ $( command wc --lines < "${fSearchResults}" ) -gt 0 ] ; then
-
-			# found something, offer to select
-			selectedEntry=$( __smartcd::choose "${fSearchResults}" "${fzfSelect1}" )
-
+			selectedEntry=$( __smartcd::choose "${fSearchResults}" "${fzfSelect1}" )	# found something, offer to select
 		else
 
-			# otherwise, throw error ( no such file or directory )
-			selectedEntry="${lookUpPath}"
-
+			selectedEntry="${lookUpPath}"												# otherwise, throw error ( no such file or directory )
 		fi
 	fi
 
@@ -88,13 +56,15 @@ function __smartcd::choose()
 	local fOptions="${1}"
 	local fzfSelect1="${2}"
 	local fzfPreview=""
-	local cmdPreview=$( whereis -b exa tree ls | command awk '/: ./ { print $2 ; exit }' )
+	local cmdPreview=""
 	local errMessage="no such directory [ {} ]'\n\n'hint: run '\033[1m'smartcd --cleanup'\033[22m'"
+
+	cmdPreview=$( whereis -b eza exa tree ls | awk '/: ./ { print $2 ; exit }' )
 
 	case "${cmdPreview}" in
 
-	*/exa)
-		fzfPreview='[ -d {} ] && '${cmdPreview}' --tree --colour=always --icons --group-directories-first --all --level=1 {} || echo '"${errMessage}"''
+	*/exa|*/eza)
+		fzfPreview='[ -d {} ] && '${cmdPreview}' --tree --icons --group-directories-first --all --level=1 {} || echo '"${errMessage}"''
 	;;
 
 	*/tree)
@@ -106,7 +76,8 @@ function __smartcd::choose()
 	;;
 	esac
 
-	command awk '!seen[ $0 ]++ && $0 != ""' "${fOptions}" | command fzf ${fzfSelect1} --delimiter="\n" --layout="reverse" --height="40%" --preview="${fzfPreview}"
+	# shellcheck disable=SC2086															# SC2086: Double quote to prevent globbing and word splitting.
+	awk '!seen[ $0 ]++ && $0 != ""' "${fOptions}" | fzf ${fzfSelect1} --delimiter="\n" --layout="reverse" --height="40%" --preview="${fzfPreview}"
 }
 
 function __smartcd::enterPath()
@@ -114,16 +85,15 @@ function __smartcd::enterPath()
 	local returnCode=0
 	local directory="${1}"
 
-	[ "${PWD}" = "${directory}" ] && return ${returnCode}
+	[[ "${PWD}" == "${directory}" ]] && return ${returnCode}
 
-	if [ -d "${directory}" ] && [ -r "${directory}" ] || [ "-" = "${directory}" ] ; then
+	if [[ -d "${directory}" ]] && [[ -r "${directory}" ]] || [[ "-" == "${directory}" ]] ; then
 		__smartcd::autoexecRun .on_leave.smartcd.sh
 	fi
 
-	builtin cd "${directory}"
-	returnCode=$?
+	builtin cd "${directory}" || returnCode=$?
 
-	if [ ${returnCode} -eq 0 ] ; then
+	if (( returnCode == 0 )) ; then
 
 		__smartcd::databaseSavePath "${PWD}"
 		__smartcd::autoexecRun .on_entry.smartcd.sh
@@ -137,9 +107,13 @@ function __smartcd::enterPath()
 
 function __smartcd::filesystemSearch()
 {
-	local searchPath=$( dirname -- "${1}" )
-	local searchString=$( basename -- "${1}" )
-	local cmdFinder=$( whereis -b fdfind fd find | command awk '/: ./ { print $2 ; exit }' )
+	local searchPath=""
+	local searchString=""
+	local cmdFinder=""
+
+	searchPath=$( dirname -- "${1}" )
+	searchString=$( basename -- "${1}" )
+	cmdFinder=$( whereis -b fdfind fd find | awk '/: ./ { print $2 ; exit }' )
 
 	case "${cmdFinder}" in
 
@@ -155,7 +129,8 @@ function __smartcd::filesystemSearch()
 
 function __smartcd::databaseSearch()
 {
-	local searchString=$( echo "${1}" | sed --expression='s:\.:\\.:g' --expression='s:/:.*/.*:g' )
+	local searchString=""
+	searchString=$( printf '%s' "${1}" | sed --expression='s:\.:\\.:g' --expression='s:/:.*/.*:g' )
 
 	# search paths ending with *searchString* ( no deeper paths after searchString allowed )
 	command grep --ignore-case --extended-regexp "${searchString}"'[^/]*$' "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}"
@@ -169,22 +144,21 @@ function __smartcd::databaseSavePath()
 	local ignoreItem=""
 	local ignoreItemFound=""
 
-	[ "${directory}" = "${HOME}" ] || [ "${directory}" = "/" ] && return	# avoid saving $HOME and /
+	[[ "${directory}" == "${HOME}" ]] || [[ "${directory}" == "/" ]] && return 0		# avoid saving $HOME and /
 
-	# search in ignore list
-	while true ; do
+	while true ; do																		# search in ignore list
 
 		(( ++iCounter ))
 
-		ignoreItem=$( echo "${SMARTCD_HIST_IGNORE}"'|' | command cut --delimiter='|' --fields=${iCounter} )
-		[ -z "${ignoreItem}" ] && break
+		ignoreItem=$( printf '%s|' "${SMARTCD_HIST_IGNORE}" | cut --delimiter='|' --fields=${iCounter} )
+		[[ -z "${ignoreItem}" ]] && break
 
-		ignoreItemFound=$( echo "${directory}" | command grep --extended-regexp '/'"${ignoreItem}"'$|/'"${ignoreItem}"'/' )
+		ignoreItemFound=$( command grep --extended-regexp '/'"${ignoreItem}"'$|/'"${ignoreItem}"'/' <<< "${directory}" )
 
-		if [ ! -z "${ignoreItemFound}" ] ; then
-			# remove ignored entry and leave function
-			__smartcd::databaseDeletePath "${directory}"
-			return
+		if [[ -n "${ignoreItemFound}" ]] ; then
+
+			__smartcd::databaseDeletePath "${directory}"								# remove ignored entry and leave function
+			return 0
 		fi
 	done
 
@@ -192,23 +166,23 @@ function __smartcd::databaseSavePath()
 	__smartcd::databaseDeletePath "${directory}"
 
 	# add to first row
-	command sed --in-place "1 s:^:${directory}\n:" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}"
+	sed --in-place "1 s:^:${directory}\n:" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}"
 
 	# limit max records
-	command sed --in-place $(( ${SMARTCD_HIST_SIZE} + 1 ))',$ d' "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}"
+	sed --in-place $(( SMARTCD_HIST_SIZE + 1 ))',$ d' "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}"
 }
 
 function __smartcd::databaseDeletePath()
 {
 	local directory="${1}"
-	command sed --in-place "\\:^${directory}$:d" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}"
+	sed --in-place "\\:^${directory}$:d" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}"
 }
 
 function __smartcd::databaseCleanup()
 {
 	local IFS=
 
-	local fTmp=$( mktemp )
+	local fTmp=""
 	local line=""
 
 	local iCounter=0
@@ -216,11 +190,13 @@ function __smartcd::databaseCleanup()
 	local ignoreItem=""
 	local ignoreItemFound=""
 
-	[ ! -f "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}" ] && __smartcd::databaseReset
+	fTmp=$( mktemp )
 
-	while read -r line || [ -n "${line}" ] ; do
+	[[ ! -f "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}" ]] && __smartcd::databaseReset
 
-		if [ -d "${line}" ] ; then
+	while read -r line || [[ -n "${line}" ]] ; do
+
+		if [[ -d "${line}" ]] ; then
 
 			iCounter=0
 			bIgnore="false"
@@ -230,29 +206,29 @@ function __smartcd::databaseCleanup()
 
 				(( ++iCounter ))
 
-				ignoreItem=$( echo "${SMARTCD_HIST_IGNORE}"'|' | command cut --delimiter='|' --fields=${iCounter} )
-				[ -z "${ignoreItem}" ] && break
+				ignoreItem=$( printf '%s|' "${SMARTCD_HIST_IGNORE}" | cut --delimiter='|' --fields=${iCounter} )
+				[[ -z "${ignoreItem}" ]] && break
 
-				ignoreItemFound=$( echo "${line}" | command grep --extended-regexp '/'"${ignoreItem}"'$|/'"${ignoreItem}"'/' )
+				ignoreItemFound=$( command grep --extended-regexp '/'"${ignoreItem}"'$|/'"${ignoreItem}"'/' <<< "${line}" )
 
-				if [ ! -z "${ignoreItemFound}" ] ; then
+				if [[ -n "${ignoreItemFound}" ]] ; then
 					bIgnore="true"
 					break
 				fi
 			done
 
-			[ "${bIgnore}" = "false" ] && printf "%s\n" "${line}" >> "${fTmp}"
+			[[ "${bIgnore}" == "false" ]] && printf "%s\n" "${line}" >> "${fTmp}"
 		fi
 
 	done < "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}"
 
-	command awk '!seen[$0]++' "${fTmp}" > "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}"
+	awk '!seen[$0]++' "${fTmp}" > "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}"
 
 	# remove empty lines
-	command sed --in-place '/^[[:blank:]]*$/ d' "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}"
+	sed --in-place '/^[[:blank:]]*$/ d' "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}"
 
 	# at least one row needed
-	[ $( command wc --lines < "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}" ) -eq 0 ] && __smartcd::databaseReset
+	(( $( command wc --lines < "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}" ) == 0 )) && __smartcd::databaseReset
 
 	command rm --force "${fTmp}"
 }
@@ -270,174 +246,186 @@ function __smartcd::autoexecRun()
 	local checksum=""
 	local checksumStored=""
 
-	[ ! -f "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" ] && __smartcd::autoexecReset
+	[[ ! -f "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" ]] && __smartcd::autoexecReset
 
 	# autoexec file
-	if [ -f "${fAutoexec}" ] && [ ! -r "${fAutoexec}" ] ; then
+	if [[ -f "${fAutoexec}" ]] && [[ ! -r "${fAutoexec}" ]] ; then
 
-		printf "smartcd - autoexec file [ ${fAutoexec} ] : UNREADABLE\n"
+		printf 'smartcd - autoexec file [ %s ] : UNREADABLE\n' "${fAutoexec}"
 
-	elif [ -r "${fAutoexec}" ] ; then
+	elif [[ -r "${fAutoexec}" ]] ; then
 
-		checksum=$( command md5sum "${fAutoexec}" | command awk '{ print $1 }' )
-		checksumStored=$( command grep --max-count=1 "${PWD}/${fAutoexec}" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" | command cut --delimiter='|' --fields=2 )
+		checksum=$( md5sum "${fAutoexec}" | awk '{ print $1 }' )
+		checksumStored=$( command grep --max-count=1 "${PWD}/${fAutoexec}" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" | cut --delimiter='|' --fields=2 )
 
-		if [ "${checksum}" = "${checksumStored}" ] ; then
+		if [[ "${checksum}" == "${checksumStored}" ]] ; then
 			bExecuted="true"
+			# shellcheck disable=SC1090													# SC1090: Can't follow non-constant source. Use a directive to specify location
 			source "${fAutoexec}"
 		else
-			printf "smartcd - autoexec file [ ${fAutoexec} ] : INVALID CHECKSUM\n"
+			printf 'smartcd - autoexec file [ %s ] : INVALID CHECKSUM\n' "${fAutoexec}"
 		fi
 	fi
 
 	# global autoexec file
-	if [ -f "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" ] && [ ! -r "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" ] ; then
+	if [[ -f "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" ]] && [[ ! -r "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" ]] ; then
 
-		printf "smartcd - autoexec file [ "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" ] : UNREADABLE\n"
+		printf 'smartcd - autoexec file [ %s/%s ] : UNREADABLE\n' "${SMARTCD_CONFIG_FOLDER}" "${fAutoexec:1}"
 
-	elif [ -r "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" ] && [ "${bExecuted}" = "false" ] ; then
+	elif [[ -r "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" ]] && [[ "${bExecuted}" == "false" ]] ; then
 
-		checksum=$( command md5sum "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" | command awk '{ print $1 }' )
-		checksumStored=$( command grep --max-count=1 "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" | command cut --delimiter='|' --fields=2 )
+		checksum=$( md5sum "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" | awk '{ print $1 }' )
+		checksumStored=$( command grep --max-count=1 "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" | cut --delimiter='|' --fields=2 )
 
-		if [ "${checksum}" = "${checksumStored}" ] ; then
+		if [[ "${checksum}" == "${checksumStored}" ]] ; then
+			# shellcheck disable=SC1090													# SC1090: Can't follow non-constant source. Use a directive to specify location
 			source "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}"
 		else
-			printf "smartcd - autoexec file [ "${SMARTCD_CONFIG_FOLDER}/${fAutoexec:1}" ] : INVALID CHECKSUM\n"
+			printf 'smartcd - autoexec file [ %s/%s ] : INVALID CHECKSUM\n' "${SMARTCD_CONFIG_FOLDER}" "${fAutoexec:1}"
 		fi
 	fi
 }
 
 function __smartcd::autoexecAdd()
 {
-	local fAutoexec=$( realpath -- "${1}" )
-	local fPath=$( dirname -- "${fAutoexec}" )
-	local fName=$( basename -- "${fAutoexec}" )
+	local fAutoexec=""
+	local fPath=""
+	local fName=""
 	local checksum=""
 
-	if [ "${fPath}" = "${SMARTCD_CONFIG_FOLDER}" ] && [ "${fName}" != "on_entry.smartcd.sh" ] && [ "${fName}" != "on_leave.smartcd.sh" ] ; then
+	fAutoexec=$( realpath -- "${1}" )
+	fPath=$( dirname -- "${fAutoexec}" )
+	fName=$( basename -- "${fAutoexec}" )
 
-		printf "smartcd - autoexec file [ ${fAutoexec} ] : INVALID FILENAME\n"
+	if [[ "${fPath}" == "${SMARTCD_CONFIG_FOLDER}" ]] && [[ "${fName}" != "on_entry.smartcd.sh" ]] && [[ "${fName}" != "on_leave.smartcd.sh" ]] ; then
+
+		printf 'smartcd - autoexec file [ %s ] : INVALID FILENAME\n' "${fAutoexec}"
 		return 2
 
-	elif [ "${fPath}" != "${SMARTCD_CONFIG_FOLDER}" ] && [ "${fName}" != ".on_entry.smartcd.sh" ] && [ "${fName}" != ".on_leave.smartcd.sh" ] ; then
+	elif [[ "${fPath}" != "${SMARTCD_CONFIG_FOLDER}" ]] && [[ "${fName}" != ".on_entry.smartcd.sh" ]] && [[ "${fName}" != ".on_leave.smartcd.sh" ]] ; then
 
-		printf "smartcd - autoexec file [ ${fAutoexec} ] : INVALID FILENAME\n"
+		printf 'smartcd - autoexec file [ %s ] : INVALID FILENAME\n' "${fAutoexec}"
 		return 2
 
-	elif [ ! -r "${fAutoexec}" ] ; then
+	elif [[ ! -r "${fAutoexec}" ]] ; then
 
-		printf "smartcd - autoexec file [ ${fAutoexec} ] : UNREADABLE\n"
+		printf 'smartcd - autoexec file [ %s ] : UNREADABLE\n' "${fAutoexec}"
 		return 2
 	fi
 
-	[ ! -f "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" ] && __smartcd::autoexecReset
+	[[ ! -f "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" ]] && __smartcd::autoexecReset
 
-	checksum=$( command md5sum "${fAutoexec}" | command awk '{ print $1 }' )
+	checksum=$( md5sum "${fAutoexec}" | awk '{ print $1 }' )
 
-	printf "${fAutoexec}|${checksum}\n" >> "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}"
-	printf "smartcd - autoexec file [ ${fAutoexec} ] : ADDED\n"
+	printf '%s|%s\n' "${fAutoexec}" "${checksum}" >> "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}"
+	printf 'smartcd - autoexec file [ %s ] : ADDED\n' "${fAutoexec}"
 
-	# remove previous checksum
-	__smartcd::autoexecCleanup
+	__smartcd::autoexecCleanup															# remove previous checksum
 }
 
 function __smartcd::autoexecCleanup()
 {
 	local IFS=
 
-	local fTmp=$( mktemp )
+	local fTmp=""
 	local line=""
 	local fAutoexec=""
 	local checksum=""
 	local checksumStored=""
 
-	[ ! -f "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" ] && __smartcd::autoexecReset
+	fTmp=$( mktemp )
 
-	while read -r line || [ -n "${line}" ] ; do
+	[[ ! -f "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" ]] && __smartcd::autoexecReset
 
-		fAutoexec=$( echo "${line}" | command cut --delimiter='|' --fields=1 )
-		checksumStored=$( echo "${line}" | command cut --delimiter='|' --fields=2 )
+	while read -r line || [[ -n "${line}" ]] ; do
+
+		fAutoexec=$( cut --delimiter='|' --fields=1 <<< "${line}" )
+		checksumStored=$( cut --delimiter='|' --fields=2 <<< "${line}" )
 		checksum=""
 
-		[ -r "${fAutoexec}" ] && checksum=$( command md5sum "${fAutoexec}" | command awk '{ print $1 }' )
+		[[ -r "${fAutoexec}" ]] && checksum=$( md5sum "${fAutoexec}" | awk '{ print $1 }' )
 
-		[ "${checksum}" = "${checksumStored}" ] && printf "%s\n" "${line}" >> "${fTmp}"
+		[[ "${checksum}" == "${checksumStored}" ]] && printf '%s\n' "${line}" >> "${fTmp}"
 
 	done < "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}"
 
 	# order file and remove duplicated entries
-	command sort --unique "${fTmp}" > "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}"
+	sort --unique "${fTmp}" > "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}"
 
 	# remove empty lines
-	command sed --in-place '/^[[:blank:]]*$/ d' "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}"
+	sed --in-place '/^[[:blank:]]*$/ d' "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}"
 
 	# at least one row needed
-	[ $( command wc --lines < "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" ) -eq 0 ] && __smartcd::autoexecReset
+	(( $( wc --lines < "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" ) == 0 )) && __smartcd::autoexecReset
 
 	command rm --force "${fTmp}"
-	command chmod 600 "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}"
+	chmod 600 "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}"
 }
 
 function __smartcd::autoexecReset()
 {
 	mkdir --parents "${SMARTCD_CONFIG_FOLDER}"
-	printf "\n" > "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}"
-	command chmod 600 "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}"
+	printf '\n' > "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}"
+	chmod 600 "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}"
 }
 
 function __smartcd::askAndReset()
 {
 	local answer=""
 
-	printf "smartcd - paths database file [ ${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE} ] will be erased\n"
+	printf 'smartcd - paths database file [ %s/%s ] will be erased\n' "${SMARTCD_CONFIG_FOLDER}" "${SMARTCD_HIST_FILE}"
+
 	printf '\033[1m'"Continue [y/n]? "'\033[22m'
-	answer="" ; read answer
+	answer="" ; read -r answer
 
 	case "${answer}" in
 		Y|y|YES|yes|Yes)
 			__smartcd::databaseReset
-			printf "smartcd - paths database file [ ${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE} ] : RESET\n"
+			printf 'smartcd - paths database file [ %s/%s ] : RESET\n' "${SMARTCD_CONFIG_FOLDER}" "${SMARTCD_HIST_FILE}"
 		;;
 
 		*)
-			printf "smartcd - paths database file [ ${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE} ] : CANCELLED\n"
+			printf 'smartcd - paths database file [ %s/%s ] : CANCELLED\n' "${SMARTCD_CONFIG_FOLDER}" "${SMARTCD_HIST_FILE}"
 		;;
 	esac
 
-	printf "\nsmartcd - autoexec database file [ ${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE} ] will be erased\n"
+	printf '\nsmartcd - autoexec database file [ %s/%s ] will be erased\n' "${SMARTCD_CONFIG_FOLDER}" "${SMARTCD_AUTOEXEC_FILE}"
 	printf '\033[1m'"Continue [y/n]? "'\033[22m'
-	answer="" ; read answer
+	answer="" ; read -r answer
 
 	case "${answer}" in
 		Y|y|YES|yes|Yes)
 			__smartcd::autoexecReset
-			printf "smartcd - autoexec database file [ ${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE} ] : RESET\n"
+			printf 'smartcd - autoexec database file [ %s/%s ] : RESET\n' "${SMARTCD_CONFIG_FOLDER}" "${SMARTCD_AUTOEXEC_FILE}"
 		;;
 
 		*)
-			printf "smartcd - autoexec database file [ ${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE} ] : CANCELLED\n"
+			printf 'smartcd - autoexec database file [ %s/%s ] : CANCELLED\n' "${SMARTCD_CONFIG_FOLDER}" "${SMARTCD_AUTOEXEC_FILE}"
 		;;
 	esac
 }
 
 function __smartcd::upgrade()
 {
-	local readonly SRC_REMOTE="https://raw.githubusercontent.com/lfromanini/smartcd/main/smartcd.sh"
+	local -r SRC_REMOTE="https://raw.githubusercontent.com/lfromanini/smartcd/main/smartcd.sh"
 
 	local returnCode=0
 	local answer=""
 	local fScriptInstalled=""
 	local fScriptRemote=""
-	local versionInstalled=$( __smartcd::printVersion | command cut --delimiter=' ' --fields=2 )
+	local versionInstalled=""
 	local versionRemote=""
 
-	if [ -n "$BASH_VERSION" ] ; then
+	versionInstalled=$( __smartcd::printVersion | cut --delimiter=' ' --fields=2 )
 
-		fScriptInstalled=$( dirname "$( realpath ${BASH_SOURCE[0]} )" )
+	if [[ -n "${BASH_VERSION}" ]] ; then
 
-	elif [ -n "$ZSH_VERSION" ] ; then
+		fScriptInstalled=$( dirname "$( realpath "${BASH_SOURCE[0]}" )" )
 
+	elif [[ -n "${ZSH_VERSION}" ]] ; then
+
+		# shellcheck disable=SC2296														# SC2296: Parameter expansions can't start with `{`. Double check syntax.
+		# shellcheck disable=SC2298														# SC2298: `${$x}` is invalid. For expansion, use ${x}. For indirection, use arrays, ${!x} or (for sh) eval.
 		fScriptInstalled=${${(%):-%x}:A:h}
 
 	else
@@ -448,60 +436,60 @@ function __smartcd::upgrade()
 
 	fScriptInstalled+="/smartcd.sh"
 
-	if [ ! -w "${fScriptInstalled}" ] ; then
+	if [[ ! -w "${fScriptInstalled}" ]] ; then
 
-		printf "\nsmartcd - can't upgrade read only file [ ${fScriptInstalled} ]\n"
-		printf "smartcd - aborting...\n"
+		printf '\nsmartcd - cannot upgrade read only file [ %s ]\nsmartcd - aborting...\n' "${fScriptInstalled}"
 		return 1
 	fi
 
-	printf "smartcd - downloading remote version...\n\n"
+	printf 'smartcd - downloading remote version...\n\n'
 	fScriptRemote=$( mktemp )
 
-	command curl --location --output "${fScriptRemote}" "${SRC_REMOTE}"
+	curl --location --output "${fScriptRemote}" "${SRC_REMOTE}"
 	returnCode=$?
 
-	if [ ${returnCode} -ne 0 ] ; then
+	if (( returnCode != 0 )) ; then
 
 		command rm --force "${fScriptRemote}"
-		printf "smartcd - could not download remote version : FAILED\n"
+		printf 'smartcd - could not download remote version : FAILED\n'
 		return ${returnCode}
 	fi
 
-	versionRemote=$( command grep 'local readonly VERSION=' "${fScriptRemote}" | command grep --invert-match 'grep' | command cut --delimiter='"' --fields=2 )
+	versionRemote=$( command grep 'local -r VERSION=' "${fScriptRemote}" | command grep --invert-match 'grep' | cut --delimiter='"' --fields=2 )
 
-	if [ "${versionInstalled}" = "${versionRemote}" ] ; then
+	if [[ "${versionInstalled}" == "${versionRemote}" ]] ; then
 
-		printf "\nsmartcd - no need to upgrade [ ${versionInstalled} ]\n"
+		printf '\nsmartcd - no need to upgrade [ %s ]\n' "${versionInstalled}"
 		command rm --force "${fScriptRemote}"
 		return 0
 	fi
 
-	printf "\nsmartcd - upgrade available [ ${versionInstalled} -> ${versionRemote} ]\n"
+	printf '\nsmartcd - upgrade available [ %s -> %s ]\n' "${versionInstalled}" "${versionRemote}"
 	printf '\033[1m'"Upgrade [y/n]? "'\033[22m'
-	answer="" ; read answer
+	answer="" ; read -r answer
 
 	case "${answer}" in
 		Y|y|YES|yes|Yes)
-			printf "\nsmartcd - upgrading file [ ${fScriptInstalled} ]...\n"
+			printf '\nsmartcd - pgrading file [ %s ]...\n' "${versionInstalled}"
 			command mv --force "${fScriptRemote}" "${fScriptInstalled}"
 			returnCode=$?
 
-			if [ ${returnCode} -eq 0 ] ; then
+			if (( returnCode == 0 )) ; then
 
-				printf "smartcd - upgrade [ ${versionInstalled} -> ${versionRemote} ] : UPGRADED\n"
+				printf 'smartcd - upgrade  [ %s -> %s ] : UPGRADED\n' "${versionInstalled}" "${versionRemote}"
+				# shellcheck disable=SC1090												# SC1090: Can't follow non-constant source. Use a directive to specify location
 				source "${fScriptInstalled}"
 
 			else
 
 				command rm --force "${fScriptRemote}"
-				printf "smartcd - upgrade [ ${versionInstalled} -> ${versionRemote} ] : FAILED\n"
+				printf 'smartcd - upgrade  [ %s -> %s ] : FAILED\n' "${versionInstalled}" "${versionRemote}"
 			fi
 		;;
 
 		*)
 			command rm --force "${fScriptRemote}"
-			printf "\nsmartcd - upgrade [ ${versionInstalled} -> ${versionRemote} ] : CANCELLED\n"
+			printf '\nsmartcd - upgrade  [ %s -> %s ] : CANCELLED\n' "${versionInstalled}" "${versionRemote}"
 		;;
 	esac
 
@@ -510,40 +498,59 @@ function __smartcd::upgrade()
 
 function __smartcd::printVersion()
 {
-	local readonly VERSION="2.4.4"
-	printf "smartcd ${VERSION}\n"
+	# local readonly VERSION="2.4.5"													# force update from version 2.4.4
+	local -r VERSION="2.5.0"
+	printf 'smartcd %s\n' "${VERSION}"
 }
 
 function __smartcd::printHelp()
 {
 	__smartcd::printVersion
-	printf "A mnemonist cd command with autoexec feature\n\n"
-	printf "Options:\n\n"
-	printf "smartcd [OPTIONS]\n\n"
-	printf "    -l, --list                list paths saved at database file and allowed autexec files\n"
-	printf "                              also print ignored paths list\n\n"
-	printf "    -c, --cleanup             remove incorrect entries from paths and autoexec database files\n\n"
-	printf "    -e, --edit                manually edit paths database file\n"
-	printf "                              autoexec database file should not be manually edited\n\n"
-	printf "    -r, --reset               reset database file to original state\n\n"
-	printf "        --autoexec=\"[FILE]\"   for security reasons, authorize file to be autoexecuted\n"
-	printf "                              if FILE contents changes, it must be authorized again\n"
-	printf "                              FILE can be relative to folder:\n"
-	printf "                                  /path/to/.on_entry.smartcd.sh\n"
-	printf "                                  /path/to/.on_leave.smartcd.sh\n"
-	printf "                              or global ( wihout the \".\" at filename ):\n"
-	printf "                                  ${SMARTCD_CONFIG_FOLDER}/on_entry.smartcd.sh\n"
-	printf "                                  ${SMARTCD_CONFIG_FOLDER}/on_leave.smartcd.sh\n"
-	printf "                              ( if relative file is executed, global will be skipped for the given folder )\n\n"
-	printf "    -u, --upgrade             self upgrade if a new version is available online\n\n"
-	printf "    -v, --version             output version information\n\n"
-	printf "    -h, --help                display this help\n\n"
-	printf "cd [ARGS]\n\n"
-	printf "        --                    list last directories and navigate to the selected entry\n\n"
-	printf "        [STRING]              searchs in filesystem and in database file for partial matches\n\n"
-	printf "Databases:\n\n"
-	printf "    ${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}\n"
-	printf "    ${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}\n"
+
+	cat <<-EOF
+		A mnemonist cd command with autoexec feature
+
+		Options:
+
+		smartcd [OPTIONS]
+
+		    -l, --list                list paths saved at database file and allowed autexec files
+		                              also print ignored paths list
+
+		    -c, --cleanup             remove incorrect entries from paths and autoexec database files
+
+		    -e, --edit                manually edit paths database file
+		                              autoexec database file should not be manually edited
+
+		    -r, --reset               reset database file to original state
+
+		        --autoexec="[FILE]"   for security reasons, authorize file to be autoexecuted
+		                              if FILE contents changes, it must be authorized again
+		                              FILE can be relative to folder:
+		                                  /path/to/.on_entry.smartcd.sh
+		                                  /path/to/.on_leave.smartcd.sh
+		                              or global ( wihout the "." at filename ):
+		                                  ${SMARTCD_CONFIG_FOLDER}/on_entry.smartcd.sh
+		                                  ${SMARTCD_CONFIG_FOLDER}/on_leave.smartcd.sh
+		                              ( if relative file is executed, global will be skipped for the given folder )
+
+		    -u, --upgrade             self upgrade if a new version is available online
+
+		    -V, --version             output version information
+
+		    -h, --help                display this help
+
+		cd [ARGS]
+
+		        --                    list last directories and navigate to the selected entry
+
+		        [STRING]              searchs in filesystem and in database file for partial matches
+
+		Databases:
+
+		    ${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}
+		    ${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}
+	EOF
 }
 
 function smartcd()
@@ -551,35 +558,39 @@ function smartcd()
 	local arg=""
 	local fAutoexec=""
 
-	[ -z "${1}" ] && 1="--help"
+	[[ -z "${1}" ]] && set -- "--help"
 
 	for arg in "$@" ; do
 
 		case "${arg}" in
 			-l|--list)
-				printf "smartcd - paths database file [ ${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE} ] contents:\n\n"
+				printf 'smartcd - paths database file [ %s/%s ] contents:\n\n' "${SMARTCD_CONFIG_FOLDER}" "${SMARTCD_HIST_FILE}"
 				command grep --color=auto --line-number "" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}" 2>/dev/null
-				printf "\nsmartcd - autoexec database file [ ${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE} ] contents:\n\n"
-				{ command cut --delimiter='|' --fields="1" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" | command grep --color=auto --line-number --extended-regexp 'on_entry|on_leave' ; } 2>/dev/null
-				printf "\nsmartcd - ignore list [ \$SMARTCD_HIST_IGNORE ] sorted contents:\n"
-				printf "          ( always ignored \"/\" and \"\$HOME\" )\n\n"
-				printf "${SMARTCD_HIST_IGNORE}""\n" | command sed 's:|:'"\n"':g' | command sort --unique
+				printf '\nsmartcd - autoexec database file [ %s/%s ] contents:\n\n' "${SMARTCD_CONFIG_FOLDER}" "${SMARTCD_AUTOEXEC_FILE}"
+				{ cut --delimiter='|' --fields="1" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE}" | command grep --color=auto --line-number --extended-regexp 'on_entry|on_leave' ; } 2>/dev/null
+
+				# shellcheck disable=SC2016												# SC2016: Expressions don't expand in single quotes, use double quotes for that.
+				printf '\nsmartcd - ignore list [ $SMARTCD_HIST_IGNORE ] sorted contents:\n'
+				# shellcheck disable=SC2016												# SC2016: Expressions don't expand in single quotes, use double quotes for that.
+				printf '          ( always ignored "/" and "$HOME" )\n\n'
+				printf "%s\n" "${SMARTCD_HIST_IGNORE}" | sed 's:|:'"\n"':g' | sort --unique
 			;;
 
 			-c|--cleanup)
 				__smartcd::databaseCleanup
-				printf "smartcd - paths database file [ ${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE} ] : CLEAR\n"
+				printf 'smartcd - paths database file [ %s/%s ] : CLEAR\n' "${SMARTCD_CONFIG_FOLDER}" "${SMARTCD_HIST_FILE}"
 				__smartcd::autoexecCleanup
-				printf "smartcd - autoexec database file [ ${SMARTCD_CONFIG_FOLDER}/${SMARTCD_AUTOEXEC_FILE} ] : CLEAR\n"
+				printf 'smartcd - autoexec database file [ %s/%s ] : CLEAR\n' "${SMARTCD_CONFIG_FOLDER}" "${SMARTCD_AUTOEXEC_FILE}"
 			;;
 
 			-e|--edit)
-				if [ ! -z "${EDITOR}" ] ; then
+				if [[ -n "${EDITOR}" ]] ; then
 					"${EDITOR}" "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}"
 					# at least one row needed
-					[ $( command wc --lines < "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}" ) -eq 0 ] && __smartcd::databaseReset || true
+					(( $( wc --lines < "${SMARTCD_CONFIG_FOLDER}/${SMARTCD_HIST_FILE}" ) > 0 )) || __smartcd::databaseReset
 				else
-					printf "smartcd - editor variable not set [ \$EDITOR ] : ABORTED\n"
+					# shellcheck disable=SC2016											# SC2016: Expressions don't expand in single quotes, use double quotes for that.
+					printf 'smartcd - editor variable not set [ $EDITOR ] : ABORTED\n'
 				fi
 			;;
 
@@ -596,7 +607,7 @@ function smartcd()
 				__smartcd::upgrade
 			;;
 
-			-v|--version)
+			-V|--version)
 				__smartcd::printVersion
 				return 0
 			;;
@@ -607,7 +618,7 @@ function smartcd()
 			;;
 
 			*)
-				printf "error: Found argument \"${arg}\" which wasn't expected. Try --help\n"
+				printf 'error: Found argument "%s" which was not expected. Try --help\n' "${arg}"
 				return 1
 			;;
 		esac
@@ -615,11 +626,11 @@ function smartcd()
 }
 
 # bash builtin cd case insensitive
-#[ -n "$BASH_VERSION" ] && shopt -s cdspell
+#[[ -n "${BASH_VERSION}" ]] && shopt -s cdspell
 
 # key bindings
-[ -n "$BASH_VERSION" ] && bind '"\C-g":"cd --\n"'
-[ -n "$ZSH_VERSION" ] && bindkey -s '^g' 'cd --\n'
+[[ -n "${BASH_VERSION}" ]] && bind '"\C-g":"cd --\n"'
+[[ -n "${ZSH_VERSION}" ]] && bindkey -s '^g' 'cd --\n'
 
 # aliases
 alias cd="__smartcd::cd"

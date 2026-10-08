@@ -1,0 +1,6 @@
+# shell
+shell=bash
+
+# enable
+enable=require-variable-braces
+external-sources=true

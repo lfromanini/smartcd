@@ -1,0 +1,48 @@
+; https://spec.editorconfig.org/
+;
+; charset = { latin1 | utf-8 | utf-8-bom | utf-16be | utf-16le }
+; end_of_line = { cr | crlf | lf }
+; indent_size = { 4 | tab }
+; indent_style = { space | tab }
+; insert_final_newline = { true | false }
+; max_line_length = 80
+; root = { true | false }
+; tab_width = 4
+; trim_trailing_whitespace = { true | false }
+
+; common settings
+
+; this file is the top-most editorconfig file
+root = true
+
+; all files
+[*]
+charset = utf-8
+end_of_line = lf
+indent_size = 4
+indent_style = tab
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+; file extension settings
+
+; batch files
+[*.{bat,cmd}]
+end_of_line = crlf
+
+; json files
+[*.json]
+indent_style = space
+
+; markdown files
+[*.{md,md.j2,mdx,Rmd}]
+trim_trailing_whitespace = false
+
+; python
+[*.py]
+indent_style = space
+
+; yaml files
+[*.{yaml,yml}]
+indent_style = space
+indent_size = 2
