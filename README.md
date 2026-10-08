@@ -1,4 +1,11 @@
 # smartcd
+
+[![MIT license](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Shell](https://img.shields.io/badge/shell-bash-orange?logo=gnu-bash&logoColor=white)]()
+[![Shell](https://img.shields.io/badge/shell-zsh-orange?logo=gnu-zsh&logoColor=white)]()
+[![GitHub Stars](https://img.shields.io/github/stars/lfromanini/smartcd?style=social)](https://github.com/lfromanini/smartcd/stargazers)
+[![Dependencies](https://img.shields.io/badge/dependencies-fzf%7Cmd5sum-lightgrey)](https://github.com/lfromanini/smartcd#requirements)
+
 smartcd - A mnemonist cd command with autoexec feature
 
 ```
@@ -179,7 +186,7 @@ Other valid entries are `--version` and `--help`.
 
 #### Optional Requirements
 
-* [exa](https://the.exa.website/) : Directory preview. **The icon characters must be present in the font you are using in your terminal** - it is the font that contains the icons. The majority of fonts probably not include these glyphs by default. A good solution to this problem is the [Nerd Fonts project](https://www.nerdfonts.com), which patches existing fixed-width fonts with the necessary icons.
+* [eza](https://eza.rocks/) / [exa](https://github.com/ogham/exa) : Directory preview. **The icon characters must be present in the font you are using in your terminal** - it is the font that contains the icons. The majority of fonts probably not include these glyphs by default. A good solution to this problem is the [Nerd Fonts project](https://www.nerdfonts.com), which patches existing fixed-width fonts with the necessary icons.
 * [tree](https://linux.die.net/man/1/tree) : Directory preview, in case `exa` is not installed.
 * [fd](https://github.com/sharkdp/fd) : `find` alternative to search entries in filesystem.
 
